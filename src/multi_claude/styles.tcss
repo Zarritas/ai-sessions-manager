@@ -1,0 +1,12 @@
+Screen {
+    background: $surface;
+}
+
+DataTable {
+    height: 1fr;
+}
+
+.orphan {
+    color: $text-muted;
+    text-style: dim;
+}
