@@ -162,7 +162,9 @@ Todas son extensiones razonables para una v2.
 
 ### Paso 1 — Instalar un gestor de herramientas Python (si no tienes ninguno)
 
-Cualquiera de los dos funciona; **uv** es el más rápido.
+Cualquiera de los dos funciona; **uv** es el más rápido y el único que cubre las tres plataformas con el mismo binario.
+
+**Linux / macOS:**
 
 ```bash
 # uv (recomendado)
@@ -175,13 +177,25 @@ brew install pipx && pipx ensurepath          # macOS
 
 Cierra y abre la terminal para que `~/.local/bin` entre en `PATH`.
 
+**Windows (PowerShell):**
+
+```powershell
+# uv (recomendado)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+
+# o vía winget
+winget install --id=astral-sh.uv -e
+```
+
+Cierra y abre PowerShell (o reinicia Windows Terminal) para que `%USERPROFILE%\.local\bin` entre en `PATH`.
+
 ### Paso 2 — Instalar multi-claude
 
-Una sola línea, sin clonar nada:
+Una sola línea, sin clonar nada — funciona idéntico en Linux, macOS y Windows:
 
 ```bash
 uv tool install git+https://github.com/Zarritas/multi-claude.git
-# o
+# o (Linux/macOS):
 pipx install git+https://github.com/Zarritas/multi-claude.git
 ```
 
@@ -192,6 +206,10 @@ multi-claude
 ```
 
 Deberías ver la lista de tus proyectos de Claude. Pulsa `Enter` para entrar en uno, `Enter` otra vez para reanudar una sesión.
+
+> **macOS**: si es la primera vez que multi-claude lanza una sesión en una ventana nueva de iTerm2 / Terminal.app, macOS te pedirá permiso para que `osascript` controle esas apps (System Settings → Privacy & Security → Automation). Acepta una vez y queda persistido.
+>
+> **Windows**: en modo `auto` o `window`, las sesiones se abren en una pestaña nueva de Windows Terminal vía `wt.exe`. Si no estás en Windows Terminal (p.ej. `cmd.exe` o ConEmu), la TUI se suspende y `claude` corre inline.
 
 ### Actualizar a la última versión
 
@@ -216,14 +234,18 @@ Si has clonado el repo y quieres instalar tu versión modificada:
 ```bash
 git clone https://github.com/Zarritas/multi-claude.git
 cd multi-claude
-uv tool install .       # o: pipx install .
+uv tool install .                       # snapshot del estado actual
+# o, para que los cambios futuros del repo se reflejen sin reinstalar:
+uv tool install --editable .
 ```
 
 ### Troubleshooting
 
-- **`multi-claude: command not found`** tras instalar → `~/.local/bin` no está en tu `PATH`.
+- **`multi-claude: command not found`** tras instalar (Linux/macOS) → `~/.local/bin` no está en tu `PATH`.
   - `uv` y `pipx` añaden automáticamente esa ruta a la config de tu shell, pero hace falta reiniciar la terminal. Si persiste, ejecuta `uv tool dir --bin` o `pipx environment --value PIPX_BIN_DIR` y añade esa ruta a tu `PATH`.
+- **`multi-claude` no se reconoce como comando** (Windows) → reinicia Windows Terminal/PowerShell tras instalar. Si persiste, comprueba que `%USERPROFILE%\.local\bin` (o el directorio que muestre `uv tool dir --bin`) está en tu `PATH` de usuario.
 - **`claude no encontrado en PATH`** al pulsar Enter sobre una sesión → instala Claude Code CLI siguiendo su guía oficial.
+- **macOS pide permiso de Automation** la primera vez que lanzas una sesión → es el prompt nativo de `osascript` para controlar iTerm2 / Terminal.app. Acepta y no volverá a aparecer.
 - **Proyectos en gris (huérfanos)** → la carpeta original del proyecto ya no existe (moviste o borraste el directorio). Las sesiones siguen ahí pero no se pueden reanudar; bórralas con `d`.
 
 ## Desarrollo
