@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 from textual import on, work
 from textual.app import ComposeResult
@@ -11,7 +12,8 @@ from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input
 from textual.widgets.data_table import RowKey
 
-from multi_claude.discovery import Project, scan_projects
+from multi_claude.app_protocol import AppProtocol
+from multi_claude.discovery import Project
 from multi_claude.formatting import format_relative_time
 from multi_claude.index import IndexedSession, default_index
 
@@ -101,7 +103,8 @@ class SearchScreen(Screen[None]):
 
     def _project_for_session(self, session: IndexedSession) -> Project | None:
         target = Path(session.project_dir)
-        for project in scan_projects():
+        provider = cast(AppProtocol, self.app).provider
+        for project in provider.scan_projects():
             if project.encoded_path == target:
                 return project
         return None

@@ -23,11 +23,10 @@ from multi_claude.discovery import (
     WorktreeGroup,
     group_into_folders,
     group_worktrees,
-    scan_projects,
 )
 from multi_claude.filtering import FilterQuery, matches_fuzzy, parse_query
 from multi_claude.formatting import format_relative_time
-from multi_claude.launcher import LauncherError, launch_claude
+from multi_claude.launcher import LauncherError, launch_session
 from multi_claude.modals import (
     AddProjectModal,
     AssignFolderModal,
@@ -96,7 +95,7 @@ class ProjectsScreen(Screen[None]):
 
     @work(thread=True, exclusive=True, group="scan-projects")
     def _scan_projects_worker(self) -> None:
-        results = scan_projects()
+        results = self._claude_app.provider.scan_projects()
         self.app.call_from_thread(self._on_scan_complete, results)
 
     def _on_scan_complete(self, projects: list[Project]) -> None:
@@ -263,17 +262,18 @@ class ProjectsScreen(Screen[None]):
     def _apply_add_project(self, path: Path | None) -> None:
         if path is None:
             return
+        provider = self._claude_app.provider
         try:
-            launch_claude(
+            launch_session(
+                provider.new_argv(),
                 path,
-                None,
                 app=self.app,
                 mode=self._claude_app.prefs.default_mode,
             )
         except LauncherError as exc:
             self.notify(str(exc), severity="error")
             return
-        self.notify(f"Claude lanzado en {path}. Pulsa `r` para refrescar.")
+        self.notify(f"{provider.display_name} lanzado en {path}. Pulsa `r` para refrescar.")
 
     def action_settings(self) -> None:
         self.app.push_screen(

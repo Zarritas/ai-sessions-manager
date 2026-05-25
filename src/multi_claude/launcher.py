@@ -305,26 +305,30 @@ def detect_terminal_emulator() -> Emulator | None:
 # --------------------------------------------------------------------------- #
 
 
-def launch_claude(
+def launch_session(
+    argv: list[str],
     cwd: Path,
-    session_id: str | None = None,
     *,
-    display_name: str | None = None,
     app: AppLike | None = None,
     mode: LaunchMode = "auto",
 ) -> None:
-    """Launch ``claude`` with ``cwd`` and optional ``--resume`` / ``-n``.
+    """Launch ``argv`` with working directory ``cwd``.
+
+    ``argv[0]`` is the CLI binary (``claude``, ``codex``, ...). The dispatcher
+    (multiplexer / emulator / suspend) is identical regardless of which CLI is
+    being launched — provider-specific concerns end with the argv builder.
 
     ``mode`` selects the dispatch strategy:
       - ``auto``: try multiplexer first, then emulator window, then suspend.
       - ``window``: emulator window, then suspend.
       - ``suspend``: always suspend.
     """
-    claude_bin = shutil.which("claude")
-    if not claude_bin:
-        raise LauncherError("`claude` no encontrado en PATH")
+    if not argv:
+        raise LauncherError("argv vacío")
+    binary = argv[0]
+    if not shutil.which(binary):
+        raise LauncherError(f"`{binary}` no encontrado en PATH")
 
-    argv = _build_claude_argv(session_id, display_name)
     cwd_str = str(cwd)
 
     if mode == "auto":
@@ -342,6 +346,24 @@ def launch_claude(
         return
 
     _run_suspended(argv, cwd_str, app)
+
+
+def launch_claude(
+    cwd: Path,
+    session_id: str | None = None,
+    *,
+    display_name: str | None = None,
+    app: AppLike | None = None,
+    mode: LaunchMode = "auto",
+) -> None:
+    """Backwards-compatible wrapper that builds Claude argv and delegates.
+
+    Kept so existing tests and any external callers don't break during the
+    multi-provider refactor. New code should call :func:`launch_session` with
+    a ``provider.resume_argv(...)`` or ``provider.new_argv(...)`` result.
+    """
+    argv = _build_claude_argv(session_id, display_name)
+    launch_session(argv, cwd, app=app, mode=mode)
 
 
 def _try_multiplexer(argv: list[str], cwd_str: str) -> bool:

@@ -13,7 +13,7 @@ from textual.widgets import DataTable, Footer, Header, Input
 from textual.widgets.data_table import RowKey
 
 from multi_claude.app_protocol import AppProtocol
-from multi_claude.discovery import Project, scan_projects
+from multi_claude.discovery import Project
 from multi_claude.formatting import format_relative_time
 from multi_claude.modals import AssignFolderModal, RenameModal
 
@@ -68,7 +68,7 @@ class FolderScreen(Screen[None]):
         subfolders = store.children_folders(self.folder_path)
         members_encoded = set(store.members_of(self.folder_path, recursive=False))
         # Resolve members against the live project scan.
-        all_projects = {str(p.encoded_path): p for p in scan_projects()}
+        all_projects = {str(p.encoded_path): p for p in self._claude_app.provider.scan_projects()}
         direct_members = [all_projects[e] for e in members_encoded if e in all_projects]
         # Sort: subfolders first (alphabetically), then projects by last_activity desc.
         subfolders.sort(key=str.casefold)

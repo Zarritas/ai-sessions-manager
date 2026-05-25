@@ -20,7 +20,7 @@ from multi_claude.deletion import delete_session, list_active_sessions
 from multi_claude.discovery import Project
 from multi_claude.filtering import FilterQuery, matches_fuzzy, parse_query
 from multi_claude.formatting import format_relative_time, format_size
-from multi_claude.launcher import LauncherError, launch_claude
+from multi_claude.launcher import LauncherError, launch_session
 from multi_claude.modals import (
     CleanupModal,
     ColorPickerModal,
@@ -29,7 +29,7 @@ from multi_claude.modals import (
     RenameModal,
     SettingsModal,
 )
-from multi_claude.session import Session, scan_sessions
+from multi_claude.session import Session
 from multi_claude.widgets.preview import SessionPreview
 
 _SORT_KEYS_BY_COLUMN: tuple[str, ...] = ("prompt", "branch", "messages", "size", "last_activity")
@@ -100,7 +100,7 @@ class SessionsScreen(Screen[None]):
 
     @work(thread=True, exclusive=True, group="scan-sessions")
     def _scan_sessions_worker(self) -> None:
-        results = scan_sessions(self.project.encoded_path, names_store=self._claude_app.names)
+        results = self._claude_app.provider.scan_sessions(self.project)
         self.app.call_from_thread(self._on_scan_complete, results)
 
     def _on_scan_complete(self, sessions: list[Session]) -> None:
@@ -224,11 +224,16 @@ class SessionsScreen(Screen[None]):
         display_name: str | None,
         mode: LaunchMode,
     ) -> None:
+        provider = self._claude_app.provider
+        argv = (
+            provider.resume_argv(session_id, display_name)
+            if session_id is not None
+            else provider.new_argv(display_name)
+        )
         try:
-            launch_claude(
+            launch_session(
+                argv,
                 self.project.path,
-                session_id,
-                display_name=display_name,
                 app=self.app,
                 mode=mode,
             )
