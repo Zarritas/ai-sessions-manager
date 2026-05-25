@@ -1,8 +1,9 @@
-"""Tests for the provider abstraction and the Claude/Codex implementations."""
+"""Tests for the provider abstraction and the Claude/Codex/Goose/opencode implementations."""
 
 from __future__ import annotations
 
 import json
+import sqlite3
 from pathlib import Path
 
 import pytest
@@ -12,6 +13,8 @@ from ai_sessions_manager.providers import ALL_PROVIDERS, detect_available
 from ai_sessions_manager.providers.base import Provider
 from ai_sessions_manager.providers.claude import ClaudeProvider
 from ai_sessions_manager.providers.codex import CodexProvider
+from ai_sessions_manager.providers.goose import GooseProvider
+from ai_sessions_manager.providers.opencode import OpenCodeProvider
 
 
 # --------------------------------------------------------------------------- #
@@ -19,16 +22,18 @@ from ai_sessions_manager.providers.codex import CodexProvider
 # --------------------------------------------------------------------------- #
 
 
-@pytest.mark.parametrize("provider_cls", [ClaudeProvider, CodexProvider])
+@pytest.mark.parametrize(
+    "provider_cls", [ClaudeProvider, CodexProvider, GooseProvider, OpenCodeProvider]
+)
 def test_provider_satisfies_protocol(provider_cls: type) -> None:
     """Every shipped provider implementation must satisfy the runtime Protocol."""
     instance = provider_cls()
     assert isinstance(instance, Provider)
 
 
-def test_all_providers_registry_contains_claude_and_codex() -> None:
+def test_all_providers_registry_contains_every_shipped_provider() -> None:
     ids = {p.id for p in ALL_PROVIDERS}
-    assert {"claude", "codex"} <= ids
+    assert {"claude", "codex", "goose", "opencode"} <= ids
 
 
 # --------------------------------------------------------------------------- #
@@ -296,3 +301,358 @@ def test_claude_scan_projects_delegates_to_discovery(
     # Make an empty Claude tree so discovery.scan_projects returns [].
     monkeypatch.setattr(discovery_module, "CLAUDE_PROJECTS_DIR", projects_root)
     assert ClaudeProvider().scan_projects() == []
+
+
+# --------------------------------------------------------------------------- #
+# GooseProvider                                                                #
+# --------------------------------------------------------------------------- #
+
+
+def _build_goose_db(db_path: Path) -> sqlite3.Connection:
+    """Create a SQLite db matching the Goose ``sessions``/``messages`` schema.
+
+    We only define the columns the provider actually reads (plus ``archived_at``
+    for the filter). Goose's real schema has many more columns but they're
+    irrelevant here.
+    """
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE sessions (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL DEFAULT '',
+            working_dir TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            archived_at TIMESTAMP
+        );
+        CREATE TABLE messages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            session_id TEXT NOT NULL REFERENCES sessions(id),
+            role TEXT NOT NULL,
+            content_json TEXT NOT NULL,
+            created_timestamp INTEGER NOT NULL
+        );
+        """
+    )
+    return conn
+
+
+def test_goose_resume_argv_uses_id_subcommand() -> None:
+    assert GooseProvider().resume_argv("20260225_120000") == [
+        "goose",
+        "session",
+        "--resume",
+        "--id",
+        "20260225_120000",
+    ]
+
+
+def test_goose_new_argv_with_name() -> None:
+    assert GooseProvider().new_argv("my-session") == ["goose", "session", "--name", "my-session"]
+
+
+def test_goose_scan_returns_empty_when_db_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No sessions.db on disk → 0 projects, no exception."""
+    monkeypatch.setattr(
+        "ai_sessions_manager.providers.goose.GOOSE_SESSIONS_DB", tmp_path / "nope.db"
+    )
+    assert GooseProvider().scan_projects() == []
+
+
+def test_goose_groups_sessions_by_working_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "sessions.db"
+    conn = _build_goose_db(db)
+    conn.execute(
+        "INSERT INTO sessions (id, working_dir, updated_at) VALUES (?, ?, ?)",
+        ("20260225_1", str(tmp_path / "proj-a"), "2026-02-25 12:00:00"),
+    )
+    conn.execute(
+        "INSERT INTO sessions (id, working_dir, updated_at) VALUES (?, ?, ?)",
+        ("20260225_2", str(tmp_path / "proj-a"), "2026-02-25 13:00:00"),
+    )
+    conn.execute(
+        "INSERT INTO sessions (id, working_dir, updated_at) VALUES (?, ?, ?)",
+        ("20260224_1", str(tmp_path / "proj-b"), "2026-02-24 10:00:00"),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr("ai_sessions_manager.providers.goose.GOOSE_SESSIONS_DB", db)
+
+    projects = GooseProvider().scan_projects()
+    by_name = {p.name: p for p in projects}
+    assert len(projects) == 2
+    assert by_name["proj-a"].session_count == 2
+    assert by_name["proj-b"].session_count == 1
+    # Newest first: proj-a's latest is 13:00 vs proj-b's 10:00.
+    assert projects[0].name == "proj-a"
+
+
+def test_goose_skips_archived_sessions(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Sessions with ``archived_at IS NOT NULL`` must not appear."""
+    db = tmp_path / "sessions.db"
+    conn = _build_goose_db(db)
+    conn.execute(
+        "INSERT INTO sessions (id, working_dir, updated_at, archived_at) VALUES (?, ?, ?, ?)",
+        ("archived", str(tmp_path / "p"), "2026-02-25 12:00:00", "2026-02-26 09:00:00"),
+    )
+    conn.execute(
+        "INSERT INTO sessions (id, working_dir, updated_at) VALUES (?, ?, ?)",
+        ("live", str(tmp_path / "p"), "2026-02-25 13:00:00"),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr("ai_sessions_manager.providers.goose.GOOSE_SESSIONS_DB", db)
+
+    [project] = GooseProvider().scan_projects()
+    assert project.session_count == 1
+
+
+def test_goose_extracts_first_prompt_from_content_json(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db = tmp_path / "sessions.db"
+    cwd = tmp_path / "proj"
+    cwd.mkdir()
+    conn = _build_goose_db(db)
+    conn.execute(
+        "INSERT INTO sessions (id, name, working_dir, updated_at) VALUES (?, ?, ?, ?)",
+        ("20260225_1", "Login flow", str(cwd), "2026-02-25 12:00:00"),
+    )
+    # Goose serialises message content as a JSON object with a `content` list
+    # of {"type": "text", "text": "..."} blocks.
+    content = json.dumps(
+        {"content": [{"type": "text", "text": "implement the login flow with OAuth"}]}
+    )
+    conn.execute(
+        "INSERT INTO messages (session_id, role, content_json, created_timestamp) "
+        "VALUES (?, 'user', ?, 1740484800)",
+        ("20260225_1", content),
+    )
+    # Earlier-recorded assistant message that must NOT be picked as the prompt.
+    conn.execute(
+        "INSERT INTO messages (session_id, role, content_json, created_timestamp) "
+        "VALUES (?, 'assistant', ?, 1740484700)",
+        ("20260225_1", json.dumps({"content": [{"type": "text", "text": "an assistant reply"}]})),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr("ai_sessions_manager.providers.goose.GOOSE_SESSIONS_DB", db)
+
+    provider = GooseProvider()
+    [project] = provider.scan_projects()
+    [session] = provider.scan_sessions(project)
+    assert session.first_prompt == "implement the login flow with OAuth"
+    assert session.display_name == "Login flow"
+    assert session.id == "20260225_1"
+    assert session.message_count == 2  # both user + assistant counted
+
+
+def test_goose_falls_back_when_content_unparseable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Bad JSON in content_json → fallback prompt, no crash."""
+    db = tmp_path / "sessions.db"
+    conn = _build_goose_db(db)
+    conn.execute(
+        "INSERT INTO sessions (id, working_dir, updated_at) VALUES (?, ?, ?)",
+        ("s1", str(tmp_path / "p"), "2026-02-25 12:00:00"),
+    )
+    conn.execute(
+        "INSERT INTO messages (session_id, role, content_json, created_timestamp) "
+        "VALUES (?, 'user', ?, 1740484800)",
+        ("s1", "not json"),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr("ai_sessions_manager.providers.goose.GOOSE_SESSIONS_DB", db)
+
+    provider = GooseProvider()
+    [project] = provider.scan_projects()
+    [session] = provider.scan_sessions(project)
+    assert session.first_prompt == "(sin prompt inicial)"
+
+
+# --------------------------------------------------------------------------- #
+# OpenCodeProvider                                                             #
+# --------------------------------------------------------------------------- #
+
+
+def _build_opencode_db(db_path: Path) -> sqlite3.Connection:
+    """Create a SQLite db matching the (real) opencode singular-table schema."""
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE session (
+            id TEXT PRIMARY KEY,
+            project_id TEXT,
+            parent_id TEXT,
+            directory TEXT NOT NULL,
+            title TEXT,
+            time_created INTEGER,
+            time_updated INTEGER,
+            time_archived INTEGER
+        );
+        CREATE TABLE message (
+            id TEXT PRIMARY KEY,
+            session_id TEXT NOT NULL,
+            data TEXT NOT NULL,
+            time_created INTEGER,
+            time_updated INTEGER
+        );
+        CREATE TABLE part (
+            id TEXT PRIMARY KEY,
+            message_id TEXT NOT NULL,
+            session_id TEXT NOT NULL,
+            data TEXT NOT NULL,
+            time_created INTEGER,
+            time_updated INTEGER
+        );
+        """
+    )
+    return conn
+
+
+def test_opencode_resume_argv() -> None:
+    assert OpenCodeProvider().resume_argv("ses_abc123") == ["opencode", "run", "-s", "ses_abc123"]
+
+
+def test_opencode_new_argv() -> None:
+    assert OpenCodeProvider().new_argv() == ["opencode"]
+
+
+def test_opencode_scan_returns_empty_when_db_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        "ai_sessions_manager.providers.opencode.OPENCODE_DB", tmp_path / "missing.db"
+    )
+    assert OpenCodeProvider().scan_projects() == []
+
+
+def test_opencode_skips_forks_and_archived(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Forks (parent_id IS NOT NULL) and archived sessions must not surface as projects."""
+    db = tmp_path / "opencode.db"
+    cwd = str(tmp_path / "proj")
+    (tmp_path / "proj").mkdir()
+    conn = _build_opencode_db(db)
+    conn.executemany(
+        "INSERT INTO session (id, parent_id, directory, time_updated, time_archived) "
+        "VALUES (?, ?, ?, ?, ?)",
+        [
+            ("ses_root", None, cwd, 1_700_000_000_000, None),
+            ("ses_fork", "ses_root", cwd, 1_700_000_001_000, None),
+            ("ses_archived", None, cwd, 1_700_000_002_000, 1_700_000_999_000),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr("ai_sessions_manager.providers.opencode.OPENCODE_DB", db)
+
+    [project] = OpenCodeProvider().scan_projects()
+    assert project.session_count == 1  # only ses_root
+
+
+def test_opencode_canonicalises_mixed_slash_directories(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """opencode stores cwds inconsistently; same dir with different separators collapses."""
+    db = tmp_path / "opencode.db"
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    # Same logical directory written two ways — should still collapse to one project.
+    posix_form = proj.as_posix()
+    windows_form = str(proj)
+    conn = _build_opencode_db(db)
+    conn.executemany(
+        "INSERT INTO session (id, parent_id, directory, time_updated) VALUES (?, NULL, ?, ?)",
+        [
+            ("ses_a", posix_form, 1_700_000_000_000),
+            ("ses_b", windows_form, 1_700_000_500_000),
+        ],
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr("ai_sessions_manager.providers.opencode.OPENCODE_DB", db)
+
+    projects = OpenCodeProvider().scan_projects()
+    assert len(projects) == 1
+    assert projects[0].session_count == 2
+
+
+def test_opencode_extracts_first_prompt_from_part_table(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The displayed prompt comes from a part.data {type:text,text:...} blob."""
+    db = tmp_path / "opencode.db"
+    cwd = tmp_path / "proj"
+    cwd.mkdir()
+    conn = _build_opencode_db(db)
+    conn.execute(
+        "INSERT INTO session (id, parent_id, directory, title, time_updated) "
+        "VALUES (?, NULL, ?, ?, ?)",
+        ("ses_1", str(cwd), "Login planning", 1_700_000_000_000),
+    )
+    conn.execute(
+        "INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)",
+        ("msg_1", "ses_1", json.dumps({"role": "user", "time": {"created": 1_700_000_000_000}}), 1_700_000_000_000),
+    )
+    # Two text parts on the same message — earliest wins.
+    conn.execute(
+        "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+        ("prt_1", "msg_1", "ses_1", json.dumps({"type": "text", "text": "design the login screen"}), 1),
+    )
+    conn.execute(
+        "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+        ("prt_2", "msg_1", "ses_1", json.dumps({"type": "text", "text": "also do logout"}), 2),
+    )
+    # Tool-use part: must NOT be picked (filter selects only type='text').
+    conn.execute(
+        "INSERT INTO part (id, message_id, session_id, data, time_created) VALUES (?, ?, ?, ?, ?)",
+        ("prt_3", "msg_1", "ses_1", json.dumps({"type": "tool_use", "id": "x"}), 0),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr("ai_sessions_manager.providers.opencode.OPENCODE_DB", db)
+
+    provider = OpenCodeProvider()
+    [project] = provider.scan_projects()
+    [session] = provider.scan_sessions(project)
+    assert session.first_prompt == "design the login screen"
+    assert session.display_name == "Login planning"
+    assert session.id == "ses_1"
+
+
+def test_opencode_timestamp_converted_from_milliseconds(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """``time_updated`` is epoch ms; the Provider must surface seconds-float."""
+    db = tmp_path / "opencode.db"
+    conn = _build_opencode_db(db)
+    conn.execute(
+        "INSERT INTO session (id, parent_id, directory, time_updated) VALUES (?, NULL, ?, ?)",
+        ("ses_1", str(tmp_path / "p"), 1_700_000_123_456),
+    )
+    conn.commit()
+    conn.close()
+
+    monkeypatch.setattr("ai_sessions_manager.providers.opencode.OPENCODE_DB", db)
+
+    [project] = OpenCodeProvider().scan_projects()
+    # 1_700_000_123_456 ms → 1_700_000_123.456 s
+    assert project.last_activity == pytest.approx(1_700_000_123.456)

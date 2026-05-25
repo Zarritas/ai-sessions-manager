@@ -1,23 +1,39 @@
 # ai-sessions-manager
 
-TUI para navegar y reanudar sesiones de CLIs de IA — **Claude Code** y **OpenAI Codex** soportados de serie, con una arquitectura `Provider` extensible.
+TUI para navegar y reanudar sesiones de CLIs de IA. Cuatro providers de serie:
+
+| Provider | Storage | Comando resume |
+|---|---|---|
+| **Claude Code** | `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl` | `claude --resume <id>` |
+| **OpenAI Codex** | `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl` | `codex resume <id>` |
+| **Goose** (block/goose) | SQLite — `~/.local/share/goose/sessions/sessions.db` (Linux/macOS) o `%APPDATA%\Block\goose\data\sessions\sessions.db` (Windows) | `goose session --resume --id <id>` |
+| **opencode** (sst/opencode) | SQLite — `~/.local/share/opencode/opencode.db` (XDG en todas las plataformas, incluido Windows) | `opencode run -s <id>` |
+
+Arquitectura `Provider` extensible — añadir un CLI nuevo es un módulo bajo `providers/` que implementa cuatro métodos (`scan_projects`, `scan_sessions`, `resume_argv`, `new_argv`). Ver "Roadmap" más abajo para los CLIs investigados pero diferidos.
 
 ## Qué resuelve
 
-Las CLIs de IA modernas guardan cada sesión como un fichero (JSONL típicamente) en algún rincón de tu `$HOME`:
+Cuando acumulas decenas de proyectos y cientos de sesiones repartidas entre varias CLIs, encontrar "aquella conversación de hace tres semanas sobre el refactor X" se vuelve incómodo. Cada CLI tiene su propio `--resume` que solo muestra las sesiones del cwd actual, saltar entre proyectos implica `cd`s, y los IDs no son nada amigables.
 
-- Claude Code: `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl`
-- OpenAI Codex: `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`
-
-Cuando acumulas decenas de proyectos y cientos de sesiones, encontrar "aquella conversación de hace tres semanas sobre el refactor X" se vuelve incómodo: `claude --resume` y `codex resume` muestran solo las del cwd actual, saltar entre proyectos implica `cd`s, y los UUIDs no son nada amigables.
-
-`ai-sessions-manager` es un dashboard en terminal que:
+`ai-sessions-manager`:
 
 1. Te deja **elegir el provider** al arrancar (solo aparecen los CLIs que tienes instalados).
-2. Lista todos los proyectos/sesiones de ese provider con metadatos legibles (primer prompt, branch git, última actividad).
-3. Al pulsar Enter sobre una sesión, lanza `claude --resume <id>` o `codex resume <id>` (según el provider) en una pestaña/ventana nueva.
+2. Lista todos los proyectos/sesiones de ese provider con metadatos legibles (primer prompt, branch git cuando lo guarda, última actividad).
+3. Al pulsar Enter sobre una sesión, ejecuta el comando de resume del provider correspondiente en una pestaña/ventana nueva del terminal.
 
 Comando corto: `aism`. Largo: `ai-sessions-manager`.
+
+## Roadmap
+
+CLIs investigados pero no soportados aún. Cada uno tiene un blocker concreto; PRs bienvenidos:
+
+| CLI | Blocker | Veredicto |
+|---|---|---|
+| **Cursor CLI** (`cursor-agent`) | SQLite (`~/.cursor/chats/`) con schema indocumentado — reverse-engineering requerido. | Posible-con-hack |
+| **Cline CLI** | SQLite (`~/.cline/data/sessions/`) con schema indocumentado. | Posible-con-hack |
+| **Crush** (charmbracelet/crush) | SQLite global indocumentado + `--session` solo funciona en modo TUI interactivo, no en `crush run` headless. | Posible-con-hack |
+| **Gemini CLI** | Sesiones bajo `~/.gemini/tmp/<project_hash>/chats/` con `project_hash` opaco — hay que computar el hash igual que Gemini para mapear cwd → sesiones. | Posible-con-hack |
+| **Aider** | Sin sesiones discretas — todo a `.aider.chat.history.md` por cwd, sin IDs. No encaja en el modelo `Provider`. | No-soportable |
 
 ## Stack
 

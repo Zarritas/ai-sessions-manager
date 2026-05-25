@@ -17,10 +17,14 @@ from __future__ import annotations
 from ai_sessions_manager.providers.base import Provider
 from ai_sessions_manager.providers.claude import ClaudeProvider
 from ai_sessions_manager.providers.codex import CodexProvider
+from ai_sessions_manager.providers.goose import GooseProvider
+from ai_sessions_manager.providers.opencode import OpenCodeProvider
 
 ALL_PROVIDERS: tuple[Provider, ...] = (
     ClaudeProvider(),
     CodexProvider(),
+    GooseProvider(),
+    OpenCodeProvider(),
 )
 
 
@@ -33,4 +37,12 @@ def detect_available() -> list[Provider]:
     return [p for p in ALL_PROVIDERS if p.is_installed()]
 
 
-__all__ = ["Provider", "ClaudeProvider", "CodexProvider", "ALL_PROVIDERS", "detect_available"]
+__all__ = [
+    "Provider",
+    "ClaudeProvider",
+    "CodexProvider",
+    "GooseProvider",
+    "OpenCodeProvider",
+    "ALL_PROVIDERS",
+    "detect_available",
+]

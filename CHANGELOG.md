@@ -16,7 +16,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Multi-provider architecture**. A new `Provider` Protocol abstracts where each CLI stores its sessions and how to resume them. The TUI now starts on a provider-selection screen and runs the rest of the flow against whichever provider you pick.
   - **Claude Code** provider (`providers/claude.py`): wraps the original discovery/session logic. Behaviour identical to before.
   - **OpenAI Codex** provider (`providers/codex.py`): scans `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`, parses each rollout's `session_meta` event for cwd/id/git.branch, groups rollouts by cwd to form projects. Skips Codex's injected `<…>`-wrapped boilerplate (permissions, AGENTS.md, environment_context) to surface the real first prompt. Resume command: `codex resume <id>`.
+  - **Goose** provider (`providers/goose.py`): reads the SQLite `sessions.db` (Linux/macOS: `~/.local/share/goose/sessions/sessions.db`, Windows: `%APPDATA%\Block\goose\data\sessions\sessions.db`). Groups sessions by `working_dir` to form projects, filters out archived rows, extracts the first user prompt from `messages.content_json` (the serialised rust `Message` struct). Resume command: `goose session --resume --id <id>` — uses `--id` rather than `--name` because session ids are always populated while names default to empty. Validated against a real `sessions.db` written by goose 1.35.0.
+  - **opencode** provider (`providers/opencode.py`): reads the SQLite `opencode.db` at `~/.local/share/opencode/opencode.db` — opencode follows XDG on every platform (including Windows, per upstream). Honours `$OPENCODE_DB` and `$XDG_DATA_HOME` overrides. Groups root sessions (`parent_id IS NULL`, non-archived) by canonicalised `directory` (opencode stores cwds inconsistently with mixed slashes and case, so `os.path.normcase(str(Path(...)))` collapses them). The displayed first prompt comes from the `part` table (not `message.data`, which only holds role/time/summary; the actual text blocks live in `part`). Converts `time_updated` from epoch ms to seconds for consistency with the other providers. Resume command: `opencode run -s <id>`. Validated against a real `opencode.db` with 107 sessions across 13 projects.
   - `providers/__init__.py` exposes `detect_available()` for the selection screen to filter to installed CLIs.
+
+### Roadmap (investigated, deferred)
+
+Four additional CLIs were investigated and have a clear path to integration but require either schema reverse-engineering against a live install or non-trivial reverse-engineering of opaque mappings. PRs welcome:
+
+- **Cursor CLI** (`cursor-agent`): SQLite at `~/.cursor/chats/` with undocumented schema. Resume command confirmed: `cursor-agent resume <id>`.
+- **Cline CLI**: SQLite at `~/.cline/data/sessions/` with undocumented schema. Resume: `cline --id <id>`.
+- **Crush** (charmbracelet/crush): SQLite at the platform data dir with undocumented schema; additional blocker — `crush --session <id>` only works in interactive TUI mode, not `crush run`.
+- **Gemini CLI**: sessions at `~/.gemini/tmp/<project_hash>/chats/`. The `project_hash` is opaque (computed by Gemini at runtime) — needs reverse-engineering of the hash function to map a cwd back to its session dir. Resume command confirmed: `gemini --resume <uuid>`.
+
+**Aider** is explicitly out-of-scope: it stores chat history as `.aider.chat.history.md` per cwd with no discrete session boundaries or IDs — doesn't fit the `Provider` model.
 - **macOS support** for spawning new windows in `window`/`auto` mode:
   - **iTerm2** (`TERM_PROGRAM=iTerm.app`) — drives iTerm2 via AppleScript: `tell application "iTerm" to create window with default profile` followed by `write text "cd <cwd> && exec claude [...]"` into the new session. Uses the two-step form because the one-shot `command` parameter is inconsistent across iTerm2 versions.
   - **Terminal.app** (`TERM_PROGRAM=Apple_Terminal`) — `tell application "Terminal" to do script "cd <cwd> && exec claude [...]"` followed by `activate` so the new window comes to the foreground.
