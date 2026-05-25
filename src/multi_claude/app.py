@@ -1,13 +1,15 @@
-"""Top-level Textual App. Owns the screen stack, global bindings and user prefs."""
+"""Top-level Textual App. Owns the screen stack, global bindings, prefs and names store."""
 
 from __future__ import annotations
 
 from textual.app import App
 
 from multi_claude.config import Config, load_config, save_config
+from multi_claude.names import NamesStore
+from multi_claude.project_names import ProjectNamesStore
 
 
-class ClaudeBrowserApp(App):
+class ClaudeBrowserApp(App[None]):
     """Root app. Pushes ProjectsScreen at startup; SessionsScreen is pushed on Enter."""
 
     CSS_PATH = "styles.tcss"
@@ -16,6 +18,8 @@ class ClaudeBrowserApp(App):
     def __init__(self) -> None:
         super().__init__()
         self.prefs: Config = load_config()
+        self.names: NamesStore = NamesStore()
+        self.project_names: ProjectNamesStore = ProjectNamesStore()
 
     def on_mount(self) -> None:
         from multi_claude.screens.projects import ProjectsScreen

@@ -5,6 +5,11 @@ Three launch modes:
 - ``auto`` — multiplexer split > terminator tab > emulator window > suspend.
 - ``window`` — emulator window > suspend.
 - ``suspend`` — always suspend the TUI and run inline.
+
+Emulators are described declaratively in :data:`EMULATORS`. Adding a new one means
+appending an :class:`Emulator` entry: detection via env vars and/or ``TERM_PROGRAM``,
+plus an ``argv`` callable that returns the spawn command. Multiplexers are kept
+separate because their dispatch (split vs new pane) doesn't fit the same shape.
 """
 
 from __future__ import annotations
@@ -12,6 +17,8 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -20,9 +27,18 @@ from multi_claude.config import LaunchMode
 if TYPE_CHECKING:
     from textual.app import App
 
+    AppLike = App[object]
+else:
+    AppLike = object
+
 
 class LauncherError(RuntimeError):
-    """Raised when claude cannot be launched (e.g. binary not in PATH)."""
+    """Raised when claude cannot be launched (binary missing, dispatch failed, ...)."""
+
+
+# --------------------------------------------------------------------------- #
+# Multiplexer detection (tmux / zellij / terminator-as-mux)                    #
+# --------------------------------------------------------------------------- #
 
 
 def detect_multiplexer() -> str | None:
@@ -40,55 +56,194 @@ def detect_multiplexer() -> str | None:
     return None
 
 
-# Map values of $TERM_PROGRAM (case-insensitive) to our internal emulator id.
-# This is the most canonical signal an emulator can provide, so we check it first.
-_TERM_PROGRAM_MAP: dict[str, str] = {
-    "ghostty": "ghostty",
-    "wezterm": "wezterm",
-}
+# --------------------------------------------------------------------------- #
+# Emulator table                                                               #
+# --------------------------------------------------------------------------- #
 
-# Emulator-specific env vars: presence means "the user is inside this emulator".
-# Order matters only for ties, since each env var is emulator-specific.
-_EMULATOR_ENV_CHECKS: tuple[tuple[str, str], ...] = (
-    ("KITTY_PID", "kitty"),
-    ("WEZTERM_EXECUTABLE", "wezterm"),
-    ("ALACRITTY_WINDOW_ID", "alacritty"),
-    ("ALACRITTY_LOG", "alacritty"),
-    ("KONSOLE_VERSION", "konsole"),
-    ("GNOME_TERMINAL_SCREEN", "gnome-terminal"),
-    ("FOOT_VERSION", "foot"),
-    ("TERMINATOR_UUID", "terminator"),
-    ("GHOSTTY_RESOURCES_DIR", "ghostty"),
-    ("GHOSTTY_BIN_DIR", "ghostty"),
+
+ArgvBuilder = Callable[[str, list[str]], list[str]]
+
+
+@dataclass(frozen=True)
+class Emulator:
+    """A terminal emulator we know how to spawn a new window in.
+
+    ``argv`` may be ``None`` for emulators we can detect but don't know how to spawn
+    (e.g. VS Code's integrated terminal). Detection still helps surface a clear
+    error message instead of a silent fallthrough.
+    """
+
+    id: str
+    env_vars: tuple[str, ...] = ()
+    term_programs: tuple[str, ...] = ()
+    argv: ArgvBuilder | None = None
+    binary: str = field(default="")
+
+    def resolve_binary(self) -> str:
+        return self.binary or self.id
+
+
+def _shell_quote(s: str) -> str:
+    """Minimal POSIX shell quoting. Wraps in single quotes and escapes embedded quotes."""
+    return "'" + s.replace("'", "'\\''") + "'"
+
+
+def _argv_kitty(cwd: str, argv: list[str]) -> list[str]:
+    return ["kitty", "--directory", cwd, *argv]
+
+
+def _argv_wezterm(cwd: str, argv: list[str]) -> list[str]:
+    return ["wezterm", "start", "--cwd", cwd, "--", *argv]
+
+
+def _argv_alacritty(cwd: str, argv: list[str]) -> list[str]:
+    return ["alacritty", "--working-directory", cwd, "-e", *argv]
+
+
+def _argv_konsole(cwd: str, argv: list[str]) -> list[str]:
+    return ["konsole", "--workdir", cwd, "-e", *argv]
+
+
+def _argv_gnome_terminal(cwd: str, argv: list[str]) -> list[str]:
+    return ["gnome-terminal", f"--working-directory={cwd}", "--", *argv]
+
+
+def _argv_foot(cwd: str, argv: list[str]) -> list[str]:
+    return ["foot", f"--working-directory={cwd}", *argv]
+
+
+def _argv_terminator(cwd: str, argv: list[str]) -> list[str]:
+    return ["terminator", f"--working-directory={cwd}", "-x", *argv]
+
+
+def _argv_ghostty(cwd: str, argv: list[str]) -> list[str]:
+    return ["ghostty", f"--working-directory={cwd}", "-e", *argv]
+
+
+def _argv_generic(binary: str) -> ArgvBuilder:
+    def build(cwd: str, argv: list[str]) -> list[str]:
+        joined = " ".join(_shell_quote(a) for a in argv)
+        return [binary, "-e", "sh", "-c", f"cd {_shell_quote(cwd)} && exec {joined}"]
+
+    return build
+
+
+EMULATORS: tuple[Emulator, ...] = (
+    Emulator(
+        id="kitty",
+        env_vars=("KITTY_PID",),
+        term_programs=("kitty",),
+        argv=_argv_kitty,
+    ),
+    Emulator(
+        id="wezterm",
+        env_vars=("WEZTERM_EXECUTABLE",),
+        term_programs=("wezterm", "WezTerm"),
+        argv=_argv_wezterm,
+    ),
+    Emulator(
+        id="alacritty",
+        env_vars=("ALACRITTY_WINDOW_ID", "ALACRITTY_LOG"),
+        term_programs=("alacritty", "Alacritty"),
+        argv=_argv_alacritty,
+    ),
+    Emulator(
+        id="konsole",
+        env_vars=("KONSOLE_VERSION",),
+        argv=_argv_konsole,
+    ),
+    Emulator(
+        id="gnome-terminal",
+        env_vars=("GNOME_TERMINAL_SCREEN",),
+        argv=_argv_gnome_terminal,
+    ),
+    Emulator(
+        id="foot",
+        env_vars=("FOOT_VERSION",),
+        argv=_argv_foot,
+    ),
+    Emulator(
+        id="terminator",
+        env_vars=("TERMINATOR_UUID",),
+        argv=_argv_terminator,
+    ),
+    Emulator(
+        id="ghostty",
+        env_vars=("GHOSTTY_RESOURCES_DIR", "GHOSTTY_BIN_DIR"),
+        term_programs=("ghostty", "Ghostty"),
+        argv=_argv_ghostty,
+    ),
+    # Detected but not supported as standalone windows. Detection still helps surface
+    # a clear "not supported" message instead of silently falling through.
+    Emulator(
+        id="vscode",
+        env_vars=("VSCODE_INJECTION",),
+        term_programs=("vscode",),
+        argv=None,
+    ),
+    Emulator(
+        id="iterm",
+        term_programs=("iTerm.app",),
+        argv=None,
+    ),
+    Emulator(
+        id="apple-terminal",
+        term_programs=("Apple_Terminal",),
+        argv=None,
+    ),
+    Emulator(
+        id="tabby",
+        term_programs=("tabby", "Tabby"),
+        argv=None,
+    ),
+    Emulator(
+        id="warp",
+        term_programs=("WarpTerminal",),
+        argv=None,
+    ),
 )
 
 
-def detect_terminal_emulator() -> str | None:
-    """Return a short identifier for the surrounding terminal emulator, or None.
+_GENERIC_FALLBACKS = ("x-terminal-emulator", "xterm")
 
-    Used by the ``window`` mode to spawn a new window in the *same* emulator the user
-    is already running. Detection priority:
+
+def detect_terminal_emulator() -> Emulator | None:
+    """Return the matched :class:`Emulator` or ``None`` if no detection fires.
+
+    Detection priority:
 
       1. ``$TERM_PROGRAM`` (canonical signal published by modern emulators).
-      2. Emulator-specific env vars (one per emulator).
-      3. Generic fallback: ``x-terminal-emulator`` / ``xterm`` if present in PATH.
+      2. Emulator-specific env vars.
+      3. Generic fallback: ``x-terminal-emulator`` / ``xterm`` if in PATH.
 
     Each step requires the matching binary to actually be in PATH; if not, we move on.
     """
-    term_program = os.environ.get("TERM_PROGRAM", "").lower()
-    target = _TERM_PROGRAM_MAP.get(term_program)
-    if target and shutil.which(target):
-        return target
+    term_program = os.environ.get("TERM_PROGRAM", "")
+    if term_program:
+        tp_lower = term_program.lower()
+        for emu in EMULATORS:
+            if any(tp.lower() == tp_lower for tp in emu.term_programs) and (
+                emu.argv is None or shutil.which(emu.resolve_binary())
+            ):
+                return emu
 
-    for env_var, binary in _EMULATOR_ENV_CHECKS:
-        if os.environ.get(env_var) and shutil.which(binary):
-            return binary
+    for emu in EMULATORS:
+        if not emu.env_vars:
+            continue
+        if any(os.environ.get(v) for v in emu.env_vars) and (
+            emu.argv is None or shutil.which(emu.resolve_binary())
+        ):
+            return emu
 
-    if shutil.which("x-terminal-emulator"):
-        return "x-terminal-emulator"
-    if shutil.which("xterm"):
-        return "xterm"
+    for fallback in _GENERIC_FALLBACKS:
+        if shutil.which(fallback):
+            return Emulator(id=fallback, argv=_argv_generic(fallback), binary=fallback)
     return None
+
+
+# --------------------------------------------------------------------------- #
+# Dispatch                                                                     #
+# --------------------------------------------------------------------------- #
 
 
 def launch_claude(
@@ -96,7 +251,7 @@ def launch_claude(
     session_id: str | None = None,
     *,
     display_name: str | None = None,
-    app: "App | None" = None,
+    app: AppLike | None = None,
     mode: LaunchMode = "auto",
 ) -> None:
     """Launch ``claude`` with ``cwd`` and optional ``--resume`` / ``-n``.
@@ -127,81 +282,59 @@ def launch_claude(
         _run_suspended(argv, cwd_str, app)
         return
 
-    # mode == "suspend"
     _run_suspended(argv, cwd_str, app)
 
 
 def _try_multiplexer(argv: list[str], cwd_str: str) -> bool:
     mux = detect_multiplexer()
+    if mux is None:
+        return False
+
     if mux == "tmux":
-        subprocess.run(["tmux", "split-window", "-h", "-c", cwd_str, *argv], check=False)
-        return True
-    if mux == "zellij":
-        subprocess.run(
-            ["zellij", "action", "new-pane", "--cwd", cwd_str, "--", *argv],
-            check=False,
-        )
-        return True
-    if mux == "terminator":
-        subprocess.run(
-            ["terminator", "--new-tab", f"--working-directory={cwd_str}", "-x", *argv],
-            check=False,
-        )
-        return True
-    return False
+        spawn = ["tmux", "split-window", "-h", "-c", cwd_str, *argv]
+    elif mux == "zellij":
+        spawn = ["zellij", "action", "new-pane", "--cwd", cwd_str, "--", *argv]
+    else:  # terminator
+        spawn = ["terminator", "--new-tab", f"--working-directory={cwd_str}", "-x", *argv]
+
+    try:
+        result = subprocess.run(spawn, capture_output=True, text=True, check=False)
+    except FileNotFoundError as exc:
+        raise LauncherError(f"{mux} no encontrado al ejecutar: {exc}") from exc
+
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip().splitlines()
+        tail = stderr[-1] if stderr else f"exit {result.returncode}"
+        raise LauncherError(f"{mux} falló: {tail}")
+    return True
 
 
 def _try_window(argv: list[str], cwd_str: str) -> bool:
     """Spawn ``argv`` in a new window of the detected emulator. Returns True on dispatch."""
-    emulator = detect_terminal_emulator()
-    if emulator is None:
+    emu = detect_terminal_emulator()
+    if emu is None:
         return False
-    spawn = _emulator_command(emulator, cwd_str, argv)
-    if spawn is None:
-        return False
+    if emu.argv is None:
+        raise LauncherError(
+            f"Emulador `{emu.id}` detectado pero no soportado para abrir ventana nueva. "
+            f"Usa modo 'suspend' o cambia de emulador."
+        )
+    spawn = emu.argv(cwd_str, argv)
     # Fully detach so the new window survives if the TUI process exits.
-    subprocess.Popen(  # noqa: S603 — argv is fully controlled
-        spawn,
-        start_new_session=True,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    try:
+        subprocess.Popen(
+            spawn,
+            start_new_session=True,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError as exc:
+        raise LauncherError(f"{emu.id} no encontrado al ejecutar: {exc}") from exc
     return True
 
 
-def _emulator_command(emulator: str, cwd_str: str, argv: list[str]) -> list[str] | None:
-    """Return the argv to spawn ``argv`` in a new window of ``emulator``."""
-    if emulator == "kitty":
-        return ["kitty", "--directory", cwd_str, *argv]
-    if emulator == "wezterm":
-        return ["wezterm", "start", "--cwd", cwd_str, "--", *argv]
-    if emulator == "alacritty":
-        return ["alacritty", "--working-directory", cwd_str, "-e", *argv]
-    if emulator == "konsole":
-        return ["konsole", "--workdir", cwd_str, "-e", *argv]
-    if emulator == "gnome-terminal":
-        return ["gnome-terminal", f"--working-directory={cwd_str}", "--", *argv]
-    if emulator == "foot":
-        return ["foot", f"--working-directory={cwd_str}", *argv]
-    if emulator == "terminator":
-        # New window (not tab) when explicitly in WINDOW mode.
-        return ["terminator", f"--working-directory={cwd_str}", "-x", *argv]
-    if emulator == "ghostty":
-        return ["ghostty", f"--working-directory={cwd_str}", "-e", *argv]
-    if emulator in ("x-terminal-emulator", "xterm"):
-        # No portable --cwd flag; wrap in a shell that cds first.
-        joined = " ".join(_shell_quote(a) for a in argv)
-        return [emulator, "-e", "sh", "-c", f"cd {_shell_quote(cwd_str)} && exec {joined}"]
-    return None
-
-
-def _shell_quote(s: str) -> str:
-    """Minimal POSIX shell quoting. Wraps in single quotes and escapes embedded quotes."""
-    return "'" + s.replace("'", "'\\''") + "'"
-
-
-def _run_suspended(argv: list[str], cwd_str: str, app: "App | None") -> None:
+def _run_suspended(argv: list[str], cwd_str: str, app: AppLike | None) -> None:
     if app is not None:
         with app.suspend():
             subprocess.run(argv, cwd=cwd_str, check=False)

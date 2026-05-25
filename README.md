@@ -144,6 +144,7 @@ Todas son extensiones razonables para una v2.
 
 ### Requisitos previos
 
+- **Linux** (Ubuntu/Debian/Fedora/Arch testados). macOS no está soportado de momento — falta detección nativa de iTerm2 / Terminal.app. Contribuciones bienvenidas.
 - **Python 3.10+** (la mayoría de distros modernas lo traen).
 - **`claude`** (Claude Code CLI) en `PATH`. Sin él, `multi-claude` arranca pero no podrá reanudar sesiones — la propia TUI te lo dirá.
 - *(Opcional)* **`tmux`**, **`zellij`** o **`terminator`** para que Claude se abra en un split/pestaña sin perder la TUI.

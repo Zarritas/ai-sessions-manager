@@ -11,7 +11,6 @@ from multi_claude.session import (
     scan_sessions,
     strip_command_wrappers,
 )
-
 from tests.conftest import write_session
 
 
@@ -58,8 +57,7 @@ def test_parse_session_header_extracts_cwd_branch_first_prompt(tmp_path: Path) -
 def test_parse_session_header_handles_malformed_lines(tmp_path: Path) -> None:
     jsonl = tmp_path / "broken.jsonl"
     jsonl.write_text(
-        "this is not json\n"
-        '{"type":"user","message":{"role":"user","content":"hi"},"cwd":"/x"}\n',
+        'this is not json\n{"type":"user","message":{"role":"user","content":"hi"},"cwd":"/x"}\n',
         encoding="utf-8",
     )
     header = parse_session_header(jsonl)

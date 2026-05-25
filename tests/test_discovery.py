@@ -9,7 +9,6 @@ from multi_claude.discovery import (
     resolve_real_cwd,
     scan_projects,
 )
-
 from tests.conftest import write_session
 
 
@@ -37,9 +36,7 @@ def test_resolve_real_cwd_returns_none_when_no_jsonl(tmp_path: Path) -> None:
     assert resolve_real_cwd(project_dir) is None
 
 
-def test_scan_projects_sorted_by_last_activity_desc(
-    projects_root: Path, tmp_path: Path
-) -> None:
+def test_scan_projects_sorted_by_last_activity_desc(projects_root: Path, tmp_path: Path) -> None:
     # project A: real path that exists
     real_a = tmp_path / "alpha"
     real_a.mkdir()
@@ -63,9 +60,7 @@ def test_scan_projects_flags_orphan_when_real_path_missing(
     assert projects[0].is_orphan is True
 
 
-def test_scan_projects_ignores_dirs_with_no_jsonl(
-    projects_root: Path, tmp_path: Path
-) -> None:
+def test_scan_projects_ignores_dirs_with_no_jsonl(projects_root: Path, tmp_path: Path) -> None:
     (projects_root / "-empty").mkdir()
     real = tmp_path / "real"
     real.mkdir()
@@ -89,3 +84,32 @@ def test_scan_projects_falls_back_to_decoded_path_when_no_cwd(
     # decoded path is /tmp/fake/encoded — doesn't exist → orphan
     assert projects[0].path == Path("/tmp/fake/encoded")
     assert projects[0].is_orphan is True
+
+
+def test_resolve_real_cwd_skips_corrupted_newest_jsonl(tmp_path: Path) -> None:
+    """The newest jsonl being unreadable must not block resolution; older one wins."""
+    project_dir = tmp_path / "p"
+    write_session(project_dir, session_id="old", cwd="/real/path", mtime=1000.0)
+
+    corrupted = project_dir / "broken.jsonl"
+    corrupted.write_text("{not valid json\n", encoding="utf-8")
+    import os as _os
+
+    _os.utime(corrupted, (2000.0, 2000.0))
+
+    assert resolve_real_cwd(project_dir) == Path("/real/path")
+
+
+def test_resolve_real_cwd_picks_up_cwd_in_later_event(tmp_path: Path) -> None:
+    """First event has no cwd, but a later event within the scan window does."""
+    project_dir = tmp_path / "p"
+    project_dir.mkdir()
+    jsonl = project_dir / "x.jsonl"
+    lines = [
+        '{"type":"permission-mode","permissionMode":"auto"}',
+        '{"type":"system"}',
+        '{"type":"user","cwd":"/real/late","gitBranch":"main"}',
+    ]
+    jsonl.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    assert resolve_real_cwd(project_dir) == Path("/real/late")

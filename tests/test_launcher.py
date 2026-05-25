@@ -29,7 +29,24 @@ _EMULATOR_ENVS = (
     "TERM_PROGRAM",
     "GHOSTTY_RESOURCES_DIR",
     "GHOSTTY_BIN_DIR",
+    "VSCODE_INJECTION",
 )
+
+
+class _MuxRun:
+    """Stand-in for ``subprocess.run`` that records calls and reports success."""
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    def __call__(self, argv, **kwargs):  # type: ignore[no-untyped-def]
+        self.calls.append(argv)
+
+        class _Result:
+            returncode = 0
+            stderr = ""
+
+        return _Result()
 
 
 def _clear_mux_envs(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -124,17 +141,17 @@ def test_launch_claude_uses_tmux(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_which(cmd: str) -> str | None:
         return f"/usr/bin/{cmd}"
 
-    calls = []
+    runner = _MuxRun()
 
-    def fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
-        calls.append(argv)
-
-    with patch("multi_claude.launcher.shutil.which", side_effect=fake_which), patch(
-        "multi_claude.launcher.subprocess.run", side_effect=fake_run
+    with (
+        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
+        patch("multi_claude.launcher.subprocess.run", side_effect=runner),
     ):
         launch_claude(Path("/work/x"), "sid-1")
 
-    assert calls == [["tmux", "split-window", "-h", "-c", "/work/x", "claude", "--resume", "sid-1"]]
+    assert runner.calls == [
+        ["tmux", "split-window", "-h", "-c", "/work/x", "claude", "--resume", "sid-1"]
+    ]
 
 
 def test_launch_claude_uses_zellij(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -145,17 +162,15 @@ def test_launch_claude_uses_zellij(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_which(cmd: str) -> str | None:
         return f"/usr/bin/{cmd}"
 
-    calls = []
+    runner = _MuxRun()
 
-    def fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
-        calls.append(argv)
-
-    with patch("multi_claude.launcher.shutil.which", side_effect=fake_which), patch(
-        "multi_claude.launcher.subprocess.run", side_effect=fake_run
+    with (
+        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
+        patch("multi_claude.launcher.subprocess.run", side_effect=runner),
     ):
         launch_claude(Path("/work/y"), None)
 
-    assert calls == [["zellij", "action", "new-pane", "--cwd", "/work/y", "--", "claude"]]
+    assert runner.calls == [["zellij", "action", "new-pane", "--cwd", "/work/y", "--", "claude"]]
 
 
 def test_launch_claude_uses_terminator(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -166,17 +181,15 @@ def test_launch_claude_uses_terminator(monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_which(cmd: str) -> str | None:
         return f"/usr/bin/{cmd}"
 
-    calls = []
+    runner = _MuxRun()
 
-    def fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
-        calls.append(argv)
-
-    with patch("multi_claude.launcher.shutil.which", side_effect=fake_which), patch(
-        "multi_claude.launcher.subprocess.run", side_effect=fake_run
+    with (
+        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
+        patch("multi_claude.launcher.subprocess.run", side_effect=runner),
     ):
         launch_claude(Path("/work/t"), "sid-3", display_name="Mi feature")
 
-    assert calls == [
+    assert runner.calls == [
         [
             "terminator",
             "--new-tab",
@@ -189,6 +202,29 @@ def test_launch_claude_uses_terminator(monkeypatch: pytest.MonkeyPatch) -> None:
             "Mi feature",
         ]
     ]
+
+
+def test_launch_claude_tmux_failure_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    """If tmux exits non-zero, the launcher reports the error instead of silently failing."""
+    monkeypatch.setenv("TMUX", "x")
+    _clear_emulator_envs(monkeypatch)
+
+    def fake_which(cmd: str) -> str | None:
+        return f"/usr/bin/{cmd}"
+
+    def failing_run(argv, **kwargs):  # type: ignore[no-untyped-def]
+        class _Result:
+            returncode = 1
+            stderr = "tmux: server not running\n"
+
+        return _Result()
+
+    with (
+        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
+        patch("multi_claude.launcher.subprocess.run", side_effect=failing_run),
+        pytest.raises(LauncherError, match="tmux: server not running"),
+    ):
+        launch_claude(Path("/work"), "sid")
 
 
 def test_launch_claude_fallback_runs_inline(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -205,8 +241,9 @@ def test_launch_claude_fallback_runs_inline(monkeypatch: pytest.MonkeyPatch) -> 
     def fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
         calls.append((argv, kwargs.get("cwd")))
 
-    with patch("multi_claude.launcher.shutil.which", side_effect=fake_which), patch(
-        "multi_claude.launcher.subprocess.run", side_effect=fake_run
+    with (
+        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
+        patch("multi_claude.launcher.subprocess.run", side_effect=fake_run),
     ):
         launch_claude(Path("/work/z"), "sid-2", app=None)
 
@@ -227,8 +264,9 @@ def test_launch_claude_window_mode_uses_kitty(monkeypatch: pytest.MonkeyPatch) -
         def __init__(self, argv, **kwargs):  # type: ignore[no-untyped-def]
             popen_calls.append((argv, kwargs))
 
-    with patch("multi_claude.launcher.shutil.which", side_effect=fake_which), patch(
-        "multi_claude.launcher.subprocess.Popen", FakePopen
+    with (
+        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
+        patch("multi_claude.launcher.subprocess.Popen", FakePopen),
     ):
         launch_claude(Path("/work/k"), "sid-k", mode="window")
 
@@ -259,8 +297,9 @@ def test_launch_claude_window_mode_falls_back_to_suspend_when_no_emulator(
     def fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
         calls.append((argv, kwargs.get("cwd")))
 
-    with patch("multi_claude.launcher.shutil.which", side_effect=fake_which), patch(
-        "multi_claude.launcher.subprocess.run", side_effect=fake_run
+    with (
+        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
+        patch("multi_claude.launcher.subprocess.run", side_effect=fake_run),
     ):
         launch_claude(Path("/work/q"), "sid-q", mode="window")
 
@@ -280,8 +319,9 @@ def test_launch_claude_suspend_mode_skips_multiplexer(monkeypatch: pytest.Monkey
     def fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
         calls.append((argv, kwargs.get("cwd")))
 
-    with patch("multi_claude.launcher.shutil.which", side_effect=fake_which), patch(
-        "multi_claude.launcher.subprocess.run", side_effect=fake_run
+    with (
+        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
+        patch("multi_claude.launcher.subprocess.run", side_effect=fake_run),
     ):
         launch_claude(Path("/work/s"), None, mode="suspend")
 
@@ -297,7 +337,8 @@ def test_detect_emulator_prefers_term_program_ghostty(
         "multi_claude.launcher.shutil.which",
         side_effect=lambda cmd: f"/usr/bin/{cmd}" if cmd == "ghostty" else None,
     ):
-        assert detect_terminal_emulator() == "ghostty"
+        emu = detect_terminal_emulator()
+        assert emu is not None and emu.id == "ghostty"
 
 
 def test_detect_emulator_term_program_wezterm(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -307,7 +348,8 @@ def test_detect_emulator_term_program_wezterm(monkeypatch: pytest.MonkeyPatch) -
         "multi_claude.launcher.shutil.which",
         side_effect=lambda cmd: f"/usr/bin/{cmd}" if cmd == "wezterm" else None,
     ):
-        assert detect_terminal_emulator() == "wezterm"
+        emu = detect_terminal_emulator()
+        assert emu is not None and emu.id == "wezterm"
 
 
 def test_detect_emulator_term_program_beats_xterm_fallback(
@@ -320,7 +362,8 @@ def test_detect_emulator_term_program_beats_xterm_fallback(
         "multi_claude.launcher.shutil.which",
         side_effect=lambda cmd: f"/usr/bin/{cmd}",  # everything exists
     ):
-        assert detect_terminal_emulator() == "ghostty"
+        emu = detect_terminal_emulator()
+        assert emu is not None and emu.id == "ghostty"
 
 
 def test_detect_emulator_ghostty_via_env_var(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -331,7 +374,24 @@ def test_detect_emulator_ghostty_via_env_var(monkeypatch: pytest.MonkeyPatch) ->
         "multi_claude.launcher.shutil.which",
         side_effect=lambda cmd: f"/usr/bin/{cmd}" if cmd == "ghostty" else None,
     ):
-        assert detect_terminal_emulator() == "ghostty"
+        emu = detect_terminal_emulator()
+        assert emu is not None and emu.id == "ghostty"
+
+
+def test_detect_emulator_vscode_unsupported_raises_in_window_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """VS Code's integrated terminal is detectable but cannot spawn new windows."""
+    _clear_mux_envs(monkeypatch)
+    _clear_emulator_envs(monkeypatch)
+    monkeypatch.setenv("TERM_PROGRAM", "vscode")
+
+    with patch(
+        "multi_claude.launcher.shutil.which",
+        side_effect=lambda cmd: "/usr/bin/claude" if cmd == "claude" else None,
+    ):
+        with pytest.raises(LauncherError, match="vscode"):
+            launch_claude(Path("/work/v"), "sid-v", mode="window")
 
 
 def test_launch_claude_window_mode_uses_ghostty(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -348,8 +408,9 @@ def test_launch_claude_window_mode_uses_ghostty(monkeypatch: pytest.MonkeyPatch)
         def __init__(self, argv, **kwargs):  # type: ignore[no-untyped-def]
             popen_calls.append(argv)
 
-    with patch("multi_claude.launcher.shutil.which", side_effect=fake_which), patch(
-        "multi_claude.launcher.subprocess.Popen", FakePopen
+    with (
+        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
+        patch("multi_claude.launcher.subprocess.Popen", FakePopen),
     ):
         launch_claude(Path("/work/g"), "sid-g", mode="window")
 
@@ -373,8 +434,9 @@ def test_launch_claude_auto_falls_through_to_window(monkeypatch: pytest.MonkeyPa
         def __init__(self, argv, **kwargs):  # type: ignore[no-untyped-def]
             popen_calls.append(argv)
 
-    with patch("multi_claude.launcher.shutil.which", side_effect=fake_which), patch(
-        "multi_claude.launcher.subprocess.Popen", FakePopen
+    with (
+        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
+        patch("multi_claude.launcher.subprocess.Popen", FakePopen),
     ):
         launch_claude(Path("/work/w"), None, mode="auto")
 

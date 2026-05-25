@@ -1,6 +1,5 @@
 [project]
 name = "multi-claude"
-version = "0.1.0"
 description = "TUI to browse and resume Claude Code projects and sessions"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,7 +14,6 @@ classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
     "Operating System :: POSIX :: Linux",
-    "Operating System :: MacOS",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -25,7 +23,9 @@ classifiers = [
 ]
 dependencies = [
     "textual>=0.80",
+    "rapidfuzz>=3.6",
 ]
+dynamic = ["version"]
 
 [project.urls]
 Homepage = "https://github.com/Zarritas/multi-claude"
@@ -40,11 +40,19 @@ dev = [
     "pytest>=8",
     "pytest-asyncio>=0.23",
     "textual-dev>=1.5",
+    "ruff>=0.6",
+    "mypy>=1.10",
 ]
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling", "hatch-vcs"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "vcs"
+
+[tool.hatch.build.hooks.vcs]
+version-file = "src/multi_claude/_version.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/multi_claude"]
@@ -52,3 +60,30 @@ packages = ["src/multi_claude"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = [
+    "B008",
+    "SIM117",
+    "RUF012",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src/multi_claude"]
+
+[[tool.mypy.overrides]]
+module = "multi_claude._version"
+ignore_errors = true

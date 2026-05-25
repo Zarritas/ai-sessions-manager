@@ -10,7 +10,6 @@ import pytest
 from multi_claude import discovery as discovery_module
 from multi_claude.app import ClaudeBrowserApp
 from multi_claude.names import NamesStore
-
 from tests.conftest import write_session
 
 
@@ -117,8 +116,9 @@ async def test_app_orphan_project_blocks_open(
     app = ClaudeBrowserApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        from multi_claude.screens.projects import ProjectsScreen
         from textual.widgets import DataTable
+
+        from multi_claude.screens.projects import ProjectsScreen
 
         assert isinstance(app.screen, ProjectsScreen)
         assert app.screen._projects[0].is_orphan is True
@@ -195,6 +195,7 @@ async def test_filter_in_sessions_screen(synthetic_world: Path) -> None:
         await pilot.pause()
 
         from multi_claude.screens.sessions import SessionsScreen
+
         assert isinstance(app.screen, SessionsScreen)
 
         await pilot.press("slash")
@@ -219,6 +220,7 @@ async def test_rename_session_via_modal(synthetic_world: Path, tmp_path: Path) -
         await pilot.pause()
 
         from multi_claude.screens.sessions import SessionsScreen
+
         assert isinstance(app.screen, SessionsScreen)
 
         # cursor on first row (ses-beta-1). Press e to rename.
@@ -226,6 +228,7 @@ async def test_rename_session_via_modal(synthetic_world: Path, tmp_path: Path) -
         await pilot.pause()
 
         from multi_claude.modals import RenameModal
+
         assert isinstance(app.screen, RenameModal)
         modal_input = app.screen.query_one("#name-input", Input)
         modal_input.value = "feature/login"
@@ -237,7 +240,7 @@ async def test_rename_session_via_modal(synthetic_world: Path, tmp_path: Path) -
         store = NamesStore()  # picks up XDG from monkeypatched env
         assert store.get("ses-beta-1") == "feature/login"
         # Session in memory was reloaded with the name
-        named = [s for s in app.screen._sessions if s.id == "ses-beta-1"][0]
+        named = next(s for s in app.screen._sessions if s.id == "ses-beta-1")
         assert named.display_name == "feature/login"
 
 
@@ -249,6 +252,7 @@ async def test_rename_session_empty_input_deletes_name(synthetic_world: Path) ->
     async with app.run_test() as pilot:
         await pilot.pause()
         from textual.widgets import DataTable, Input
+
         app.screen.query_one("#projects", DataTable).action_select_cursor()
         await pilot.pause()
         await pilot.press("e")
@@ -271,6 +275,7 @@ async def test_delete_session_with_confirmation(synthetic_world: Path) -> None:
         await pilot.pause()
 
         from multi_claude.screens.sessions import SessionsScreen
+
         sessions_screen = app.screen
         assert isinstance(sessions_screen, SessionsScreen)
         initial_count = len(sessions_screen._sessions)
@@ -280,6 +285,7 @@ async def test_delete_session_with_confirmation(synthetic_world: Path) -> None:
         await pilot.pause()
 
         from multi_claude.modals import ConfirmDeleteModal
+
         assert isinstance(app.screen, ConfirmDeleteModal)
 
         await pilot.press("y")
@@ -300,6 +306,7 @@ async def test_delete_session_cancel_keeps_session(synthetic_world: Path) -> Non
         await pilot.pause()
 
         from multi_claude.screens.sessions import SessionsScreen
+
         sessions_screen = app.screen
         assert isinstance(sessions_screen, SessionsScreen)
         initial_count = len(sessions_screen._sessions)
@@ -325,11 +332,13 @@ async def test_delete_project_with_confirmation(synthetic_world: Path) -> None:
         await pilot.pause()
 
         from multi_claude.modals import ConfirmDeleteModal
+
         assert isinstance(app.screen, ConfirmDeleteModal)
         await pilot.press("y")
         await pilot.pause()
 
         from multi_claude.screens.projects import ProjectsScreen
+
         assert isinstance(app.screen, ProjectsScreen)
         assert len(app.screen._projects) == len(initial_projects) - 1
         # The cursor was on row 0 (most recent → beta), so beta was deleted
@@ -358,8 +367,10 @@ async def test_add_project_invokes_launcher(synthetic_world: Path, tmp_path: Pat
             await pilot.press("a")
             await pilot.pause()
 
-            from multi_claude.modals import AddProjectModal
             from textual.widgets import Input
+
+            from multi_claude.modals import AddProjectModal
+
             assert isinstance(app.screen, AddProjectModal)
             modal_input = app.screen.query_one("#path-input", Input)
             modal_input.value = str(new_real)
@@ -378,8 +389,10 @@ async def test_add_project_rejects_missing_path(synthetic_world: Path, tmp_path:
         await pilot.press("a")
         await pilot.pause()
 
-        from multi_claude.modals import AddProjectModal
         from textual.widgets import Input, Label
+
+        from multi_claude.modals import AddProjectModal
+
         assert isinstance(app.screen, AddProjectModal)
         modal_input = app.screen.query_one("#path-input", Input)
         modal_input.value = str(tmp_path / "definitely-not-here")
@@ -425,8 +438,11 @@ async def test_enter_uses_default_mode_and_shift_enter_uses_opposite(
             app.screen.query_one("#projects", DataTable).action_select_cursor()
             await pilot.pause()
             assert isinstance(app.screen, SessionsScreen)
+            # Wait for scan worker to populate sessions before activating a row.
+            await app.workers.wait_for_complete()
+            await pilot.pause()
 
-            # Default = "auto" → Enter launches auto.
+            # Default = "auto" → activating the row launches with auto.
             app.screen.query_one("#sessions", DataTable).action_select_cursor()
             await pilot.pause()
 
@@ -437,9 +453,7 @@ async def test_enter_uses_default_mode_and_shift_enter_uses_opposite(
     assert [c["mode"] for c in captured] == ["auto", "suspend"]
 
 
-async def test_settings_modal_persists_changes(
-    synthetic_world: Path, tmp_path: Path
-) -> None:
+async def test_settings_modal_persists_changes(synthetic_world: Path, tmp_path: Path) -> None:
     """Open settings, switch default to 'window', save → prefs and disk updated."""
     from multi_claude.config import load_config
 
@@ -449,8 +463,9 @@ async def test_settings_modal_persists_changes(
         await pilot.press("s")
         await pilot.pause()
 
-        from multi_claude.modals import SettingsModal
         from textual.widgets import RadioButton
+
+        from multi_claude.modals import SettingsModal
 
         assert isinstance(app.screen, SettingsModal)
         # Select "window" in the default-mode set.

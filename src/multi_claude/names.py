@@ -41,11 +41,11 @@ class NamesStore:
                 raw = json.load(f)
         except (FileNotFoundError, OSError, json.JSONDecodeError):
             raw = {}
-        self._data = {
-            str(k): str(v)
-            for k, v in raw.items()
-            if isinstance(k, str) and isinstance(v, str)
-        } if isinstance(raw, dict) else {}
+        self._data = (
+            {str(k): str(v) for k, v in raw.items() if isinstance(k, str) and isinstance(v, str)}
+            if isinstance(raw, dict)
+            else {}
+        )
         return self._data
 
     def reload(self) -> None:

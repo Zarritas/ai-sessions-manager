@@ -2,23 +2,32 @@
 
 from __future__ import annotations
 
-from textual import on
+from collections.abc import Callable
+from typing import Any, cast
+
+from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.containers import Horizontal
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input
 
-from multi_claude.config import Config, LaunchMode, alternate_for
+from multi_claude.app_protocol import AppProtocol
+from multi_claude.clipboard import ClipboardError, copy_to_clipboard
+from multi_claude.config import Config, LaunchMode, SortSpec, alternate_for
 from multi_claude.deletion import delete_session, list_active_sessions
 from multi_claude.discovery import Project
+from multi_claude.filtering import FilterQuery, matches_fuzzy, parse_query
 from multi_claude.formatting import format_relative_time, format_size
 from multi_claude.launcher import LauncherError, launch_claude
 from multi_claude.modals import ConfirmDeleteModal, RenameModal, SettingsModal
-from multi_claude.names import NamesStore
 from multi_claude.session import Session, scan_sessions
+from multi_claude.widgets.preview import SessionPreview
+
+_SORT_KEYS_BY_COLUMN: tuple[str, ...] = ("prompt", "branch", "messages", "size", "last_activity")
 
 
-class SessionsScreen(Screen):
+class SessionsScreen(Screen[None]):
     """DataTable of sessions for a single project, sorted by last_activity desc."""
 
     BINDINGS = [
@@ -26,11 +35,19 @@ class SessionsScreen(Screen):
         Binding("shift+enter", "launch_alternate", "Launch alt"),
         Binding("e", "rename", "Rename"),
         Binding("d", "delete", "Delete"),
+        Binding("y", "yank_id", "Copiar id"),
+        Binding("p", "toggle_preview", "Preview"),
         Binding("s", "settings", "Settings"),
         Binding("slash", "show_filter", "Filter"),
         Binding("escape", "back_or_clear", "Back"),
         Binding("left", "back_or_clear", "Back", show=False),
         Binding("r", "refresh", "Refresh"),
+        Binding("1", "sort_column('prompt')", "Sort prompt", show=False),
+        Binding("2", "sort_column('branch')", "Sort branch", show=False),
+        Binding("3", "sort_column('messages')", "Sort msgs", show=False),
+        Binding("4", "sort_column('size')", "Sort tamaño", show=False),
+        Binding("5", "sort_column('last_activity')", "Sort última", show=False),
+        Binding("shift+s", "toggle_sort_direction", "Sort dir"),
         Binding("ctrl+q", "quit", "Quit"),
     ]
 
@@ -39,11 +56,16 @@ class SessionsScreen(Screen):
         self.project = project
         self._sessions: list[Session] = []
         self._visible_indices: list[int] = []
-        self._names = NamesStore()
+
+    @property
+    def _claude_app(self) -> AppProtocol:
+        return cast(AppProtocol, self.app)
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield DataTable(id="sessions", cursor_type="row", zebra_stripes=True)
+        with Horizontal(id="sessions-body"):
+            yield DataTable(id="sessions", cursor_type="row", zebra_stripes=True)
+            yield SessionPreview(id="preview")
         filter_input = Input(placeholder="filtro (Esc cierra)", id="filter")
         filter_input.display = False
         yield filter_input
@@ -53,19 +75,40 @@ class SessionsScreen(Screen):
         self.sub_title = f"{self.project.name} — {self.project.path}"
         table = self.query_one("#sessions", DataTable)
         table.add_columns("Prompt", "Branch", "Msgs", "Tamaño", "Última")
+        self._apply_preview_visibility()
         self._populate()
 
+    def _apply_preview_visibility(self) -> None:
+        preview = self.query_one("#preview", SessionPreview)
+        preview.display = self._claude_app.prefs.preview_visible
+
     def _populate(self) -> None:
-        self._sessions = scan_sessions(self.project.encoded_path, names_store=self._names)
+        self.sub_title = f"{self.project.name} — escaneando…"
+        self._scan_sessions_worker()
+
+    @work(thread=True, exclusive=True, group="scan-sessions")
+    def _scan_sessions_worker(self) -> None:
+        results = scan_sessions(self.project.encoded_path, names_store=self._claude_app.names)
+        self.app.call_from_thread(self._on_scan_complete, results)
+
+    def _on_scan_complete(self, sessions: list[Session]) -> None:
+        self._sessions = sessions
+        self.sub_title = f"{self.project.name} — {self.project.path}"
+        self._apply_sort()
         self._repaint()
+
+    def _apply_sort(self) -> None:
+        spec = self._claude_app.prefs.sessions_sort
+        self._sessions.sort(key=_session_sort_value(spec.key), reverse=spec.descending)
 
     def _repaint(self) -> None:
         table = self.query_one("#sessions", DataTable)
         table.clear()
-        query = self.query_one("#filter", Input).value.strip().lower()
+        raw_query = self.query_one("#filter", Input).value
+        query = parse_query(raw_query)
         self._visible_indices = []
         for idx, session in enumerate(self._sessions):
-            if query and not self._matches(session, query):
+            if not query.is_empty and not self._matches(session, query):
                 continue
             row = (
                 session.display_name or session.first_prompt,
@@ -81,7 +124,14 @@ class SessionsScreen(Screen):
             table.focus()
 
     @staticmethod
-    def _matches(session: Session, query: str) -> bool:
+    def _matches(session: Session, query: FilterQuery) -> bool:
+        for key, value in query.constraints.items():
+            if key == "branch" and value not in (session.branch or "").lower():
+                return False
+            if key == "path" and value not in (session.cwd or "").lower():
+                return False
+            if key == "id" and value not in session.id.lower():
+                return False
         haystack = " ".join(
             filter(
                 None,
@@ -91,23 +141,26 @@ class SessionsScreen(Screen):
                     session.branch or "",
                 ],
             )
-        ).lower()
-        return query in haystack
+        )
+        return matches_fuzzy(haystack, query.free_text)
 
     @on(DataTable.RowSelected)
     def _on_row_selected(self, event: DataTable.RowSelected) -> None:
-        session = self._session_for_row(event.row_key)
+        self.action_launch_default()
+
+    @on(DataTable.RowHighlighted)
+    def _on_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
+        if not self._claude_app.prefs.preview_visible:
+            return
+        session = self._selected_session()
+        preview = self.query_one("#preview", SessionPreview)
+        preview.show_session(session.path if session is not None else None)
+
+    def action_launch_default(self) -> None:
+        session = self._selected_session()
         if session is None:
             return
         self._launch(session.id, session.display_name, self._prefs().default_mode)
-
-    def _session_for_row(self, row_key) -> Session | None:
-        if row_key.value is None:
-            return None
-        idx = int(row_key.value)
-        if idx >= len(self._sessions):
-            return None
-        return self._sessions[idx]
 
     def _selected_session(self) -> Session | None:
         table = self.query_one("#sessions", DataTable)
@@ -136,11 +189,13 @@ class SessionsScreen(Screen):
     def _apply_settings(self, result: Config | None) -> None:
         if result is None:
             return
-        self.app.update_prefs(result)  # type: ignore[attr-defined]
+        self._claude_app.update_prefs(result)
+        self._apply_sort()
+        self._repaint()
         self.notify("Ajustes guardados")
 
     def _prefs(self) -> Config:
-        return self.app.prefs  # type: ignore[attr-defined,no-any-return]
+        return self._claude_app.prefs
 
     def _launch(
         self,
@@ -164,7 +219,11 @@ class SessionsScreen(Screen):
         if session is None:
             return
         self.app.push_screen(
-            RenameModal(session.id, session.display_name),
+            RenameModal(
+                subtitle=f"id: {session.id}",
+                current_name=session.display_name,
+                title="Renombrar sesión",
+            ),
             lambda result: self._apply_rename(session.id, result),
         )
 
@@ -172,10 +231,10 @@ class SessionsScreen(Screen):
         if result is None:
             return  # cancelled
         if result == "":
-            self._names.delete(session_id)
+            self._claude_app.names.delete(session_id)
             self.notify("Nombre borrado")
         else:
-            self._names.set(session_id, result)
+            self._claude_app.names.set(session_id, result)
             self.notify(f"Renombrado: {result}")
         self._populate()
 
@@ -200,7 +259,12 @@ class SessionsScreen(Screen):
         if not confirmed:
             return
         try:
-            delete_session(session.id, self.project.encoded_path, names_store=self._names)
+            delete_session(
+                session.id,
+                self.project.encoded_path,
+                names_store=self._claude_app.names,
+                force=True,  # user already confirmed the warning in the modal
+            )
         except OSError as exc:
             self.notify(f"Error al borrar: {exc}", severity="error")
             return
@@ -232,3 +296,74 @@ class SessionsScreen(Screen):
     def action_refresh(self) -> None:
         self._populate()
         self.notify("Sesiones re-escaneadas")
+
+    def action_toggle_preview(self) -> None:
+        prefs = self._claude_app.prefs
+        new_prefs = Config(
+            default_mode=prefs.default_mode,
+            projects_sort=prefs.projects_sort,
+            sessions_sort=prefs.sessions_sort,
+            preview_visible=not prefs.preview_visible,
+            group_worktrees=prefs.group_worktrees,
+        )
+        self._claude_app.update_prefs(new_prefs)
+        self._apply_preview_visibility()
+        if new_prefs.preview_visible:
+            session = self._selected_session()
+            self.query_one("#preview", SessionPreview).show_session(
+                session.path if session else None
+            )
+        self.notify(f"Preview {'visible' if new_prefs.preview_visible else 'oculto'}")
+
+    def action_yank_id(self) -> None:
+        session = self._selected_session()
+        if session is None:
+            return
+        try:
+            backend = copy_to_clipboard(session.id)
+        except ClipboardError as exc:
+            self.notify(str(exc), severity="error")
+            return
+        self.notify(f"{session.id} copiado vía {backend}")
+
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        """Hide row-dependent bindings when no row is selected."""
+        row_dependent = {"rename", "delete", "launch_alternate", "yank_id"}
+        return not (action in row_dependent and self._selected_session() is None)
+
+    def action_sort_column(self, key: str) -> None:
+        if key not in _SORT_KEYS_BY_COLUMN:
+            return
+        spec = self._claude_app.prefs.sessions_sort
+        if spec.key == key:
+            new_spec = SortSpec(key=key, descending=not spec.descending)
+        else:
+            new_spec = SortSpec(key=key, descending=True)
+        new_prefs = Config(
+            default_mode=self._claude_app.prefs.default_mode,
+            projects_sort=self._claude_app.prefs.projects_sort,
+            sessions_sort=new_spec,
+            preview_visible=self._claude_app.prefs.preview_visible,
+            group_worktrees=self._claude_app.prefs.group_worktrees,
+        )
+        self._claude_app.update_prefs(new_prefs)
+        self._apply_sort()
+        self._repaint()
+        self.notify(f"Orden: {key} {'desc' if new_spec.descending else 'asc'}")
+
+    def action_toggle_sort_direction(self) -> None:
+        spec = self._claude_app.prefs.sessions_sort
+        self.action_sort_column(spec.key)
+
+
+def _session_sort_value(key: str) -> Callable[[Session], Any]:
+    """Return a key fn for ``list.sort`` using session field ``key``."""
+    if key == "prompt":
+        return lambda s: (s.display_name or s.first_prompt or "").casefold()
+    if key == "branch":
+        return lambda s: (s.branch or "").casefold()
+    if key == "messages":
+        return lambda s: s.message_count
+    if key == "size":
+        return lambda s: s.size_bytes
+    return lambda s: s.last_activity

@@ -1,8 +1,11 @@
 """Parse session jsonl files cheaply.
 
-We only read the first ~50 lines of each session for the listing — enough to
+We only read the first ~80 lines of each session for the listing — enough to
 extract cwd, gitBranch, version, and the first user prompt. Line count and size
 come from stat and a streaming wc-equivalent (no full parse).
+
+Heavy reads (line count, FTS content) are cached in the SQLite index keyed by
+mtime: unchanged files are read once and skipped on subsequent scans.
 """
 
 from __future__ import annotations
@@ -12,11 +15,13 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from multi_claude.index import IndexedSession, SessionIndex, default_index
 from multi_claude.names import NamesStore
-
 
 HEADER_SCAN_LINES = 80
 PROMPT_MAX_CHARS = 120
+FTS_CONTENT_MAX_CHARS = 64_000  # cap per-session FTS payload (~64 KB)
+FTS_REINDEX_SCAN_LINES = 2_000  # cap how much we read into the FTS payload
 
 
 @dataclass(frozen=True)
@@ -36,13 +41,15 @@ def scan_sessions(
     project_dir: Path,
     *,
     names_store: NamesStore | None = None,
+    index: SessionIndex | None = None,
 ) -> list[Session]:
     """Return all sessions under ``project_dir`` sorted by last_activity desc."""
     store = names_store or NamesStore()
+    idx = index if index is not None else default_index()
     sessions: list[Session] = []
     for jsonl in project_dir.glob("*.jsonl"):
         try:
-            session = _build_session(jsonl, store)
+            session = _build_session(jsonl, store, idx, project_dir)
         except OSError:
             continue
         sessions.append(session)
@@ -50,24 +57,64 @@ def scan_sessions(
     return sessions
 
 
-def _build_session(jsonl_path: Path, names_store: NamesStore) -> Session:
+def _build_session(
+    jsonl_path: Path,
+    names_store: NamesStore,
+    index: SessionIndex,
+    project_dir: Path,
+) -> Session:
     stat = jsonl_path.stat()
-    header = parse_session_header(jsonl_path)
     sid = jsonl_path.stem
+
+    cached_mtime = index.get_mtime(sid)
+    if cached_mtime is not None and cached_mtime == stat.st_mtime:
+        indexed = index.get(sid)
+        if indexed is not None:
+            return Session(
+                id=indexed.session_id,
+                path=jsonl_path,
+                first_prompt=indexed.first_prompt or "(sin prompt inicial)",
+                branch=indexed.branch,
+                cwd=indexed.cwd,
+                message_count=indexed.message_count,
+                size_bytes=indexed.size_bytes,
+                last_activity=indexed.mtime,
+                display_name=names_store.get(sid),
+            )
+
+    header = parse_session_header(jsonl_path)
+    line_count = count_lines(jsonl_path)
+    fts_content = _extract_fts_content(jsonl_path)
+
+    indexed = IndexedSession(
+        session_id=sid,
+        project_dir=str(project_dir),
+        cwd=header.get("cwd"),
+        branch=header.get("branch"),
+        first_prompt=header.get("first_prompt"),
+        message_count=line_count,
+        size_bytes=stat.st_size,
+        mtime=stat.st_mtime,
+        jsonl_path=str(jsonl_path),
+    )
+    index.upsert_session(indexed, fts_content=fts_content)
+
     return Session(
         id=sid,
         path=jsonl_path,
         first_prompt=header.get("first_prompt") or "(sin prompt inicial)",
         branch=header.get("branch"),
         cwd=header.get("cwd"),
-        message_count=count_lines(jsonl_path),
+        message_count=line_count,
         size_bytes=stat.st_size,
         last_activity=stat.st_mtime,
         display_name=names_store.get(sid),
     )
 
 
-def parse_session_header(jsonl_path: Path, max_lines: int = HEADER_SCAN_LINES) -> dict:
+def parse_session_header(
+    jsonl_path: Path, max_lines: int = HEADER_SCAN_LINES
+) -> dict[str, str | None]:
     """Read up to ``max_lines`` lines and extract first user prompt, cwd, branch, name."""
     result: dict[str, str | None] = {
         "first_prompt": None,
@@ -102,7 +149,62 @@ def parse_session_header(jsonl_path: Path, max_lines: int = HEADER_SCAN_LINES) -
     return result
 
 
-def _extract_user_prompt(event: dict) -> str | None:
+def _extract_fts_content(jsonl_path: Path) -> str:
+    """Concatenate user prompts and assistant text into one string for FTS5.
+
+    Skips tool_use/tool_result payloads to keep the index small. Caps at
+    ``FTS_CONTENT_MAX_CHARS`` so a runaway session doesn't blow up the DB.
+    """
+    parts: list[str] = []
+    total = 0
+    try:
+        with jsonl_path.open("r", encoding="utf-8", errors="replace") as f:
+            for _ in range(FTS_REINDEX_SCAN_LINES):
+                line = f.readline()
+                if not line:
+                    break
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                text = _extract_text_for_fts(event)
+                if not text:
+                    continue
+                parts.append(text)
+                total += len(text)
+                if total >= FTS_CONTENT_MAX_CHARS:
+                    break
+    except OSError:
+        return ""
+    return "\n".join(parts)[:FTS_CONTENT_MAX_CHARS]
+
+
+def _extract_text_for_fts(event: dict[str, object]) -> str | None:
+    """Pull plain text from a jsonl event, ignoring tool calls and metadata."""
+    etype = event.get("type")
+    if etype not in ("user", "assistant"):
+        return None
+    message = event.get("message")
+    if not isinstance(message, dict):
+        return None
+    content = message.get("content")
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        pieces: list[str] = []
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            btype = block.get("type")
+            if btype == "text":
+                t = block.get("text")
+                if isinstance(t, str):
+                    pieces.append(t)
+        return "\n".join(pieces) if pieces else None
+    return None
+
+
+def _extract_user_prompt(event: dict[str, object]) -> str | None:
     """If this event is a user message with string content, return the content."""
     if event.get("type") != "user":
         return None
