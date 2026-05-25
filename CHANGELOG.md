@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Bulk session cleanup (`D`) in SessionsScreen: pick a preset age (1w / 1m / 3m / 6m / 1y) or a custom `YYYY-MM-DD` date, see a live count of how many sessions would be deleted, confirm. Active sessions are skipped automatically.
+- Per-session colour override (`c`): pick from a palette; persists to `~/.config/multi-claude/session-colors.json`.
+- In-TUI editor for the colour rules (`Shift+C` / `C`): list, add (`a`), edit (`e` or Enter), delete (`d`), reorder (`j`/`k`). Save with `s`, cancel with `Esc`. Available from both ProjectsScreen and SessionsScreen since rules are global.
+- Configurable colour rules in `~/.config/multi-claude/config.json` under `color_rules`. Each rule is `{"when": "<condition>", "color": "<rich-style>"}` and the first match wins. Manual overrides still beat any rule. Supported conditions:
+  - `branch=main` — exact match (case-insensitive)
+  - `branch~=feature/*` — glob over branch (or any field)
+  - `prompt~=^/` — regex over the displayed prompt
+  - `active=true` — session is reported as live in `~/.claude/sessions`
+  - `age<1h` / `age<2d` / `age<3w` — last activity newer than the threshold
+
+### Added
+
 - `AppProtocol` (typed contract for the root app) to remove `# type: ignore[attr-defined]` on `app.prefs` / `app.names`.
 - Extensible emulator dispatch table in `launcher.py` (one entry per emulator instead of an `if/elif` chain). Adds detection for `TERM_PROGRAM` values published by iTerm2, Apple Terminal, VS Code, Tabby and Warp (notified clearly when no builder exists).
 - Stderr capture for `tmux` / `zellij` / `terminator` invocations: failures now surface as a `notify(severity="error")` instead of being swallowed.

@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
+from multi_claude.colors import ColorRule
+
 LaunchMode = Literal["auto", "window", "suspend"]
 VALID_MODES: tuple[LaunchMode, ...] = ("auto", "window", "suspend")
 
@@ -57,6 +59,7 @@ class Config:
     )
     preview_visible: bool = True
     group_worktrees: bool = True
+    color_rules: list[ColorRule] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -65,6 +68,7 @@ class Config:
             "sessions_sort": self.sessions_sort.to_dict(),
             "preview_visible": self.preview_visible,
             "group_worktrees": self.group_worktrees,
+            "color_rules": [r.to_dict() for r in self.color_rules],
         }
 
 
@@ -104,6 +108,7 @@ def load_config(path: Path | None = None) -> Config:
         sessions_sort=_coerce_sort(raw.get("sessions_sort"), VALID_SESSION_SORT, "last_activity"),
         preview_visible=bool(raw.get("preview_visible", True)),
         group_worktrees=bool(raw.get("group_worktrees", True)),
+        color_rules=_coerce_color_rules(raw.get("color_rules")),
     )
 
 
@@ -118,6 +123,17 @@ def _coerce_mode(value: object, fallback: LaunchMode) -> LaunchMode:
     if isinstance(value, str) and value in VALID_MODES:
         return value
     return fallback
+
+
+def _coerce_color_rules(value: object) -> list[ColorRule]:
+    if not isinstance(value, list):
+        return []
+    rules: list[ColorRule] = []
+    for item in value:
+        rule = ColorRule.from_dict(item)
+        if rule is not None:
+            rules.append(rule)
+    return rules
 
 
 def _coerce_sort(value: object, valid: tuple[str, ...], fallback_key: str) -> SortSpec:

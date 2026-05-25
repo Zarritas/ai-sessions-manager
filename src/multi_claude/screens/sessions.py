@@ -14,13 +14,21 @@ from textual.widgets import DataTable, Footer, Header, Input
 
 from multi_claude.app_protocol import AppProtocol
 from multi_claude.clipboard import ClipboardError, copy_to_clipboard
+from multi_claude.colors import ColorRule, resolve_style
 from multi_claude.config import Config, LaunchMode, SortSpec, alternate_for
 from multi_claude.deletion import delete_session, list_active_sessions
 from multi_claude.discovery import Project
 from multi_claude.filtering import FilterQuery, matches_fuzzy, parse_query
 from multi_claude.formatting import format_relative_time, format_size
 from multi_claude.launcher import LauncherError, launch_claude
-from multi_claude.modals import ConfirmDeleteModal, RenameModal, SettingsModal
+from multi_claude.modals import (
+    CleanupModal,
+    ColorPickerModal,
+    ColorRulesEditorModal,
+    ConfirmDeleteModal,
+    RenameModal,
+    SettingsModal,
+)
 from multi_claude.session import Session, scan_sessions
 from multi_claude.widgets.preview import SessionPreview
 
@@ -34,7 +42,10 @@ class SessionsScreen(Screen[None]):
         Binding("n", "new_session", "New"),
         Binding("shift+enter", "launch_alternate", "Launch alt"),
         Binding("e", "rename", "Rename"),
+        Binding("c", "set_color", "Color"),
+        Binding("C", "edit_color_rules", "Reglas color"),
         Binding("d", "delete", "Delete"),
+        Binding("D", "cleanup", "Limpieza"),
         Binding("y", "yank_id", "Copiar id"),
         Binding("p", "toggle_preview", "Preview"),
         Binding("s", "settings", "Settings"),
@@ -56,6 +67,7 @@ class SessionsScreen(Screen[None]):
         self.project = project
         self._sessions: list[Session] = []
         self._visible_indices: list[int] = []
+        self._active_session_ids: set[str] = set()
 
     @property
     def _claude_app(self) -> AppProtocol:
@@ -93,6 +105,7 @@ class SessionsScreen(Screen[None]):
 
     def _on_scan_complete(self, sessions: list[Session]) -> None:
         self._sessions = sessions
+        self._active_session_ids = list_active_sessions()
         self.sub_title = f"{self.project.name} — {self.project.path}"
         self._apply_sort()
         self._repaint()
@@ -102,16 +115,24 @@ class SessionsScreen(Screen[None]):
         self._sessions.sort(key=_session_sort_value(spec.key), reverse=spec.descending)
 
     def _repaint(self) -> None:
+        from rich.text import Text
+
         table = self.query_one("#sessions", DataTable)
         table.clear()
         raw_query = self.query_one("#filter", Input).value
         query = parse_query(raw_query)
         self._visible_indices = []
+        rules = self._claude_app.prefs.color_rules
+        manual = self._claude_app.session_colors
         for idx, session in enumerate(self._sessions):
             if not query.is_empty and not self._matches(session, query):
                 continue
+            is_active = session.id in self._active_session_ids
+            style = resolve_style(session, manual=manual, rules=rules, is_active=is_active)
+            label = session.display_name or session.first_prompt
+            label_cell = Text(label, style=style) if style else label
             row = (
-                session.display_name or session.first_prompt,
+                label_cell,
                 session.branch or "—",
                 str(session.message_count),
                 format_size(session.size_bytes),
@@ -271,6 +292,47 @@ class SessionsScreen(Screen[None]):
         self.notify("Sesión borrada")
         self._populate()
 
+    def action_cleanup(self) -> None:
+        if not self._sessions:
+            self.notify("No hay sesiones que limpiar", severity="warning")
+            return
+        active_in_project = {s.id for s in self._sessions} & self._active_session_ids
+        modal = CleanupModal(
+            session_activities=[s.last_activity for s in self._sessions],
+            active_count=len(active_in_project),
+        )
+        self.app.push_screen(modal, self._apply_cleanup)
+
+    def _apply_cleanup(self, threshold: float | None) -> None:
+        if threshold is None:
+            return
+        targets = [
+            s
+            for s in self._sessions
+            if s.last_activity < threshold and s.id not in self._active_session_ids
+        ]
+        if not targets:
+            self.notify("Nada que borrar (todo lo viejo está activo)", severity="warning")
+            return
+        deleted = 0
+        errors = 0
+        for session in targets:
+            try:
+                delete_session(
+                    session.id,
+                    self.project.encoded_path,
+                    names_store=self._claude_app.names,
+                    force=True,
+                )
+                deleted += 1
+            except OSError:
+                errors += 1
+        if errors:
+            self.notify(f"Borradas {deleted}, {errors} errores", severity="warning")
+        else:
+            self.notify(f"Borradas {deleted} sesión(es)")
+        self._populate()
+
     def action_show_filter(self) -> None:
         filter_input = self.query_one("#filter", Input)
         filter_input.display = True
@@ -315,6 +377,52 @@ class SessionsScreen(Screen[None]):
             )
         self.notify(f"Preview {'visible' if new_prefs.preview_visible else 'oculto'}")
 
+    def action_edit_color_rules(self) -> None:
+        self.app.push_screen(
+            ColorRulesEditorModal(list(self._claude_app.prefs.color_rules)),
+            self._apply_color_rules,
+        )
+
+    def _apply_color_rules(self, result: list[ColorRule] | None) -> None:
+        if result is None:
+            return
+        prefs = self._claude_app.prefs
+        new_prefs = Config(
+            default_mode=prefs.default_mode,
+            projects_sort=prefs.projects_sort,
+            sessions_sort=prefs.sessions_sort,
+            preview_visible=prefs.preview_visible,
+            group_worktrees=prefs.group_worktrees,
+            color_rules=result,
+        )
+        self._claude_app.update_prefs(new_prefs)
+        self._repaint()
+        self.notify(f"Reglas guardadas ({len(result)})")
+
+    def action_set_color(self) -> None:
+        session = self._selected_session()
+        if session is None:
+            return
+        store = self._claude_app.session_colors
+        current = store.get(session.id)
+        subtitle = f"{(session.display_name or session.first_prompt)[:60]}"
+        self.app.push_screen(
+            ColorPickerModal(subtitle=subtitle, current_style=current),
+            lambda result: self._apply_color(session.id, result),
+        )
+
+    def _apply_color(self, session_id: str, result: str | None) -> None:
+        if result is None:
+            return  # cancelled
+        store = self._claude_app.session_colors
+        if result == "":
+            store.delete(session_id)
+            self.notify("Color borrado")
+        else:
+            store.set(session_id, result)
+            self.notify("Color asignado")
+        self._repaint()
+
     def action_yank_id(self) -> None:
         session = self._selected_session()
         if session is None:
@@ -327,9 +435,11 @@ class SessionsScreen(Screen[None]):
         self.notify(f"{session.id} copiado vía {backend}")
 
     def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
-        """Hide row-dependent bindings when no row is selected."""
-        row_dependent = {"rename", "delete", "launch_alternate", "yank_id"}
-        return not (action in row_dependent and self._selected_session() is None)
+        """Hide row-dependent bindings when no row is selected; hide cleanup if empty."""
+        row_dependent = {"rename", "delete", "launch_alternate", "yank_id", "set_color"}
+        if action in row_dependent and self._selected_session() is None:
+            return False
+        return not (action == "cleanup" and not self._sessions)
 
     def action_sort_column(self, key: str) -> None:
         if key not in _SORT_KEYS_BY_COLUMN:

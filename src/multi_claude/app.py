@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from textual.app import App
 
+from multi_claude.colors import SessionColorsStore
 from multi_claude.config import Config, load_config, save_config
 from multi_claude.names import NamesStore
 from multi_claude.project_names import ProjectNamesStore
@@ -20,6 +21,7 @@ class ClaudeBrowserApp(App[None]):
         self.prefs: Config = load_config()
         self.names: NamesStore = NamesStore()
         self.project_names: ProjectNamesStore = ProjectNamesStore()
+        self.session_colors: SessionColorsStore = SessionColorsStore()
 
     def on_mount(self) -> None:
         from multi_claude.screens.projects import ProjectsScreen

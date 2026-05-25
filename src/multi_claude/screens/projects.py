@@ -14,6 +14,7 @@ from textual.widgets import DataTable, Footer, Header, Input
 from textual.widgets.data_table import RowKey
 
 from multi_claude.app_protocol import AppProtocol
+from multi_claude.colors import ColorRule
 from multi_claude.config import Config, SortSpec
 from multi_claude.deletion import delete_project, list_active_sessions, merge_projects
 from multi_claude.discovery import Project, WorktreeGroup, group_worktrees, scan_projects
@@ -22,6 +23,7 @@ from multi_claude.formatting import format_relative_time
 from multi_claude.launcher import LauncherError, launch_claude
 from multi_claude.modals import (
     AddProjectModal,
+    ColorRulesEditorModal,
     ConfirmDeleteModal,
     MergeProjectModal,
     RenameModal,
@@ -39,6 +41,7 @@ class ProjectsScreen(Screen[None]):
         Binding("a", "add_project", "Add"),
         Binding("d", "delete", "Delete"),
         Binding("e", "rename", "Rename"),
+        Binding("C", "edit_color_rules", "Reglas color"),
         Binding("s", "settings", "Settings"),
         Binding("slash", "show_filter", "Filter"),
         Binding("escape", "clear_filter", "Clear", show=False),
@@ -356,6 +359,27 @@ class ProjectsScreen(Screen[None]):
         from multi_claude.screens.search import SearchScreen
 
         self.app.push_screen(SearchScreen())
+
+    def action_edit_color_rules(self) -> None:
+        self.app.push_screen(
+            ColorRulesEditorModal(list(self._claude_app.prefs.color_rules)),
+            self._apply_color_rules,
+        )
+
+    def _apply_color_rules(self, result: list[ColorRule] | None) -> None:
+        if result is None:
+            return
+        prefs = self._claude_app.prefs
+        new_prefs = Config(
+            default_mode=prefs.default_mode,
+            projects_sort=prefs.projects_sort,
+            sessions_sort=prefs.sessions_sort,
+            preview_visible=prefs.preview_visible,
+            group_worktrees=prefs.group_worktrees,
+            color_rules=result,
+        )
+        self._claude_app.update_prefs(new_prefs)
+        self.notify(f"Reglas guardadas ({len(result)})")
 
     def action_rename(self) -> None:
         row = self._selected_row()

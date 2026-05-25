@@ -9,6 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from multi_claude.colors import SessionColorsStore
     from multi_claude.config import Config
     from multi_claude.names import NamesStore
     from multi_claude.project_names import ProjectNamesStore
@@ -18,5 +19,6 @@ class AppProtocol(Protocol):
     prefs: Config
     names: NamesStore
     project_names: ProjectNamesStore
+    session_colors: SessionColorsStore
 
     def update_prefs(self, prefs: Config) -> None: ...
