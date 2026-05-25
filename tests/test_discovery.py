@@ -1,10 +1,10 @@
-"""Tests for multi_claude.discovery."""
+"""Tests for ai_sessions_manager.discovery."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from multi_claude.discovery import (
+from ai_sessions_manager.discovery import (
     decode_path_fallback,
     resolve_real_cwd,
     scan_projects,

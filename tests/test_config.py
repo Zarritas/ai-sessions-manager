@@ -1,4 +1,4 @@
-"""Tests for multi_claude.config."""
+"""Tests for ai_sessions_manager.config."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from multi_claude.config import (
+from ai_sessions_manager.config import (
     Config,
     SortSpec,
     alternate_for,
@@ -75,13 +75,13 @@ def test_config_path_respects_xdg_config_home(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
-    assert config_path() == tmp_path / "multi-claude" / "config.json"
+    assert config_path() == tmp_path / "ai-sessions-manager" / "config.json"
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX default path")
 def test_config_path_defaults_to_home_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
-    assert config_path() == Path.home() / ".config" / "multi-claude" / "config.json"
+    assert config_path() == Path.home() / ".config" / "ai-sessions-manager" / "config.json"
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows default path")
@@ -90,7 +90,7 @@ def test_config_path_defaults_to_appdata_on_windows(
 ) -> None:
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.setenv("APPDATA", str(tmp_path))
-    assert config_path() == tmp_path / "multi-claude" / "config.json"
+    assert config_path() == tmp_path / "ai-sessions-manager" / "config.json"
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows fallback when APPDATA missing")
@@ -99,7 +99,7 @@ def test_config_path_falls_back_to_home_config_when_appdata_missing(
 ) -> None:
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.delenv("APPDATA", raising=False)
-    assert config_path() == Path.home() / ".config" / "multi-claude" / "config.json"
+    assert config_path() == Path.home() / ".config" / "ai-sessions-manager" / "config.json"
 
 
 def test_load_reads_sort_specs(tmp_path: Path) -> None:

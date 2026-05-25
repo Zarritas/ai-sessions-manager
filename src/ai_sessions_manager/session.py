@@ -15,8 +15,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from multi_claude.index import IndexedSession, SessionIndex, default_index
-from multi_claude.names import NamesStore
+from ai_sessions_manager.index import IndexedSession, SessionIndex, default_index
+from ai_sessions_manager.names import NamesStore
 
 HEADER_SCAN_LINES = 80
 PROMPT_MAX_CHARS = 120

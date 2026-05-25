@@ -20,8 +20,8 @@ import json
 import shutil
 from pathlib import Path
 
-from multi_claude.index import SessionIndex, default_index
-from multi_claude.names import NamesStore
+from ai_sessions_manager.index import SessionIndex, default_index
+from ai_sessions_manager.names import NamesStore
 
 CLAUDE_HOME = Path.home() / ".claude"
 SESSION_ENV_DIR = CLAUDE_HOME / "session-env"

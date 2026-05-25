@@ -34,7 +34,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from multi_claude.session import Session
+    from ai_sessions_manager.session import Session
 
 
 # --------------------------------------------------------------------------- #
@@ -70,7 +70,7 @@ def palette_label_for(style: str) -> str | None:
 
 def default_path() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "multi-claude" / "session-colors.json"
+    return Path(base) / "ai-sessions-manager" / "session-colors.json"
 
 
 class SessionColorsStore:

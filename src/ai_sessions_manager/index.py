@@ -7,7 +7,7 @@ gets corrupted, the next scan rebuilds it from disk. Two tables:
 - ``sessions_fts``    — FTS5 virtual table over a concatenation of user prompts
                         and assistant text, used by the global search screen.
 
-The index lives at ``$XDG_DATA_HOME/multi-claude/index.sqlite3``.
+The index lives at ``$XDG_DATA_HOME/ai-sessions-manager/index.sqlite3``.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from typing import Any
 
 def default_index_path() -> Path:
     base = os.environ.get("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-    return Path(base) / "multi-claude" / "index.sqlite3"
+    return Path(base) / "ai-sessions-manager" / "index.sqlite3"
 
 
 @dataclass(frozen=True)

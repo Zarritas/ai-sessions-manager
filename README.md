@@ -1,12 +1,23 @@
-# multi-claude
+# ai-sessions-manager
 
-TUI para navegar los proyectos y sesiones de Claude Code y reanudar (o crear) sesiones desde un punto central.
+TUI para navegar y reanudar sesiones de CLIs de IA — **Claude Code** y **OpenAI Codex** soportados de serie, con una arquitectura `Provider` extensible.
 
 ## Qué resuelve
 
-Claude Code guarda cada sesión como un `.jsonl` bajo `~/.claude/projects/<encoded-path>/`. Cuando acumulas decenas de proyectos y cientos de sesiones, encontrar "aquella conversación de hace tres semanas sobre el refactor X" se vuelve incómodo: `claude --resume` te muestra solo las del cwd actual, y saltar entre proyectos implica `cd`s y memorizar UUIDs.
+Las CLIs de IA modernas guardan cada sesión como un fichero (JSONL típicamente) en algún rincón de tu `$HOME`:
 
-`multi-claude` es un dashboard en terminal que lista todos tus proyectos, muestra sus sesiones con metadatos legibles, y al pulsar Enter lanza `claude --resume <id>` en un panel/pestaña nueva del multiplexer o emulador de terminal.
+- Claude Code: `~/.claude/projects/<encoded-cwd>/<uuid>.jsonl`
+- OpenAI Codex: `~/.codex/sessions/YYYY/MM/DD/rollout-<ts>-<uuid>.jsonl`
+
+Cuando acumulas decenas de proyectos y cientos de sesiones, encontrar "aquella conversación de hace tres semanas sobre el refactor X" se vuelve incómodo: `claude --resume` y `codex resume` muestran solo las del cwd actual, saltar entre proyectos implica `cd`s, y los UUIDs no son nada amigables.
+
+`ai-sessions-manager` es un dashboard en terminal que:
+
+1. Te deja **elegir el provider** al arrancar (solo aparecen los CLIs que tienes instalados).
+2. Lista todos los proyectos/sesiones de ese provider con metadatos legibles (primer prompt, branch git, última actividad).
+3. Al pulsar Enter sobre una sesión, lanza `claude --resume <id>` o `codex resume <id>` (según el provider) en una pestaña/ventana nueva.
+
+Comando corto: `aism`. Largo: `ai-sessions-manager`.
 
 ## Stack
 
@@ -117,8 +128,8 @@ Solo se configura el **predeterminado**. El **alternativo** (Shift+Enter) se der
 | `suspend`      | `window`                  |
 
 Persistido en:
-- **Linux/macOS**: `~/.config/multi-claude/config.json` (o `$XDG_CONFIG_HOME/multi-claude/config.json` si está definido).
-- **Windows**: `%APPDATA%\multi-claude\config.json` (típicamente `C:\Users\<user>\AppData\Roaming\multi-claude\config.json`).
+- **Linux/macOS**: `~/.config/ai-sessions-manager/config.json` (o `$XDG_CONFIG_HOME/ai-sessions-manager/config.json` si está definido).
+- **Windows**: `%APPDATA%\ai-sessions-manager\config.json` (típicamente `C:\Users\<user>\AppData\Roaming\ai-sessions-manager\config.json`).
 
 ```json
 {
@@ -151,7 +162,7 @@ Todas son extensiones razonables para una v2.
 
 - **Linux** (Ubuntu/Debian/Fedora/Arch testados), **macOS** o **Windows 10/11**.
 - **Python 3.10+** (la mayoría de distros modernas lo traen; en macOS `brew install python@3.13`; en Windows usa el instalador oficial o `winget install Python.Python.3.13`).
-- **`claude`** (Claude Code CLI) en `PATH`. Sin él, `multi-claude` arranca pero no podrá reanudar sesiones — la propia TUI te lo dirá.
+- **`claude`** (Claude Code CLI) en `PATH`. Sin él, `ai-sessions-manager` arranca pero no podrá reanudar sesiones — la propia TUI te lo dirá.
 - *(Opcional, Linux/macOS)* **`tmux`** o **`zellij`** (o **`terminator`** sólo en Linux) para que Claude se abra en un split/pestaña sin perder la TUI.
 - *(Opcional)* Un emulador soportado:
   - **Linux**: kitty, WezTerm, Ghostty, Alacritty, Konsole, GNOME Terminal, foot, Terminator, xterm.
@@ -189,42 +200,42 @@ winget install --id=astral-sh.uv -e
 
 Cierra y abre PowerShell (o reinicia Windows Terminal) para que `%USERPROFILE%\.local\bin` entre en `PATH`.
 
-### Paso 2 — Instalar multi-claude
+### Paso 2 — Instalar ai-sessions-manager
 
 Una sola línea, sin clonar nada — funciona idéntico en Linux, macOS y Windows:
 
 ```bash
-uv tool install git+https://github.com/Zarritas/multi-claude.git
+uv tool install git+https://github.com/Zarritas/ai-sessions-manager.git
 # o (Linux/macOS):
-pipx install git+https://github.com/Zarritas/multi-claude.git
+pipx install git+https://github.com/Zarritas/ai-sessions-manager.git
 ```
 
 ### Paso 3 — Lanzarlo
 
 ```bash
-multi-claude
+ai-sessions-manager
 ```
 
 Deberías ver la lista de tus proyectos de Claude. Pulsa `Enter` para entrar en uno, `Enter` otra vez para reanudar una sesión.
 
-> **macOS**: si es la primera vez que multi-claude lanza una sesión en una ventana nueva de iTerm2 / Terminal.app, macOS te pedirá permiso para que `osascript` controle esas apps (System Settings → Privacy & Security → Automation). Acepta una vez y queda persistido.
+> **macOS**: si es la primera vez que ai-sessions-manager lanza una sesión en una ventana nueva de iTerm2 / Terminal.app, macOS te pedirá permiso para que `osascript` controle esas apps (System Settings → Privacy & Security → Automation). Acepta una vez y queda persistido.
 >
 > **Windows**: en modo `auto` o `window`, las sesiones se abren en una pestaña nueva de Windows Terminal vía `wt.exe`. Si no estás en Windows Terminal (p.ej. `cmd.exe` o ConEmu), la TUI se suspende y `claude` corre inline.
 
 ### Actualizar a la última versión
 
 ```bash
-uv tool upgrade multi-claude
+uv tool upgrade ai-sessions-manager
 # o
-pipx upgrade multi-claude
+pipx upgrade ai-sessions-manager
 ```
 
 ### Desinstalar
 
 ```bash
-uv tool uninstall multi-claude
+uv tool uninstall ai-sessions-manager
 # o
-pipx uninstall multi-claude
+pipx uninstall ai-sessions-manager
 ```
 
 ### Instalación desde una copia local del repo
@@ -232,8 +243,8 @@ pipx uninstall multi-claude
 Si has clonado el repo y quieres instalar tu versión modificada:
 
 ```bash
-git clone https://github.com/Zarritas/multi-claude.git
-cd multi-claude
+git clone https://github.com/Zarritas/ai-sessions-manager.git
+cd ai-sessions-manager
 uv tool install .                       # snapshot del estado actual
 # o, para que los cambios futuros del repo se reflejen sin reinstalar:
 uv tool install --editable .
@@ -241,9 +252,9 @@ uv tool install --editable .
 
 ### Troubleshooting
 
-- **`multi-claude: command not found`** tras instalar (Linux/macOS) → `~/.local/bin` no está en tu `PATH`.
+- **`ai-sessions-manager: command not found`** tras instalar (Linux/macOS) → `~/.local/bin` no está en tu `PATH`.
   - `uv` y `pipx` añaden automáticamente esa ruta a la config de tu shell, pero hace falta reiniciar la terminal. Si persiste, ejecuta `uv tool dir --bin` o `pipx environment --value PIPX_BIN_DIR` y añade esa ruta a tu `PATH`.
-- **`multi-claude` no se reconoce como comando** (Windows) → reinicia Windows Terminal/PowerShell tras instalar. Si persiste, comprueba que `%USERPROFILE%\.local\bin` (o el directorio que muestre `uv tool dir --bin`) está en tu `PATH` de usuario.
+- **`ai-sessions-manager` no se reconoce como comando** (Windows) → reinicia Windows Terminal/PowerShell tras instalar. Si persiste, comprueba que `%USERPROFILE%\.local\bin` (o el directorio que muestre `uv tool dir --bin`) está en tu `PATH` de usuario.
 - **`claude no encontrado en PATH`** al pulsar Enter sobre una sesión → instala Claude Code CLI siguiendo su guía oficial.
 - **macOS pide permiso de Automation** la primera vez que lanzas una sesión → es el prompt nativo de `osascript` para controlar iTerm2 / Terminal.app. Acepta y no volverá a aparecer.
 - **Proyectos en gris (huérfanos)** → la carpeta original del proyecto ya no existe (moviste o borraste el directorio). Las sesiones siguen ahí pero no se pueden reanudar; bórralas con `d`.
@@ -251,21 +262,21 @@ uv tool install --editable .
 ## Desarrollo
 
 ```bash
-git clone https://github.com/Zarritas/multi-claude.git
-cd multi-claude
+git clone https://github.com/Zarritas/ai-sessions-manager.git
+cd ai-sessions-manager
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
-multi-claude        # arranca la TUI
+ai-sessions-manager        # arranca la TUI
 pytest              # corre la suite (74 tests)
 ```
 
 ## Estructura del código
 
 ```
-src/multi_claude/
-  __main__.py        # entrypoint: arranca ClaudeBrowserApp
-  app.py             # ClaudeBrowserApp(textual.App) — registra screens
+src/ai_sessions_manager/
+  __main__.py        # entrypoint: arranca AiSessionsApp
+  app.py             # AiSessionsApp(textual.App) — registra screens
   discovery.py       # scan_projects() → list[Project]
   session.py         # scan_sessions(project) → list[Session], parsers
   launcher.py        # launch_claude(cwd, session_id) con detección de multiplexer

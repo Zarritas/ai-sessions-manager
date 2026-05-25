@@ -12,10 +12,10 @@ from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input
 from textual.widgets.data_table import RowKey
 
-from multi_claude.app_protocol import AppProtocol
-from multi_claude.discovery import Project
-from multi_claude.formatting import format_relative_time
-from multi_claude.modals import AssignFolderModal, RenameModal
+from ai_sessions_manager.app_protocol import AppProtocol
+from ai_sessions_manager.discovery import Project
+from ai_sessions_manager.formatting import format_relative_time
+from ai_sessions_manager.modals import AssignFolderModal, RenameModal
 
 
 class FolderScreen(Screen[None]):
@@ -45,7 +45,7 @@ class FolderScreen(Screen[None]):
         self._rows: list[str | Project] = []
 
     @property
-    def _claude_app(self) -> AppProtocol:
+    def _root_app(self) -> AppProtocol:
         return cast(AppProtocol, self.app)
 
     def compose(self) -> ComposeResult:
@@ -64,11 +64,11 @@ class FolderScreen(Screen[None]):
         table.focus()
 
     def _refresh_rows(self) -> None:
-        store = self._claude_app.project_folders
+        store = self._root_app.project_folders
         subfolders = store.children_folders(self.folder_path)
         members_encoded = set(store.members_of(self.folder_path, recursive=False))
         # Resolve members against the live project scan.
-        all_projects = {str(p.encoded_path): p for p in self._claude_app.provider.scan_projects()}
+        all_projects = {str(p.encoded_path): p for p in self._root_app.provider.scan_projects()}
         direct_members = [all_projects[e] for e in members_encoded if e in all_projects]
         # Sort: subfolders first (alphabetically), then projects by last_activity desc.
         subfolders.sort(key=str.casefold)
@@ -82,7 +82,7 @@ class FolderScreen(Screen[None]):
     def _repaint(self) -> None:
         table = self.query_one("#folder-contents", DataTable)
         table.clear()
-        store = self._claude_app.project_folders
+        store = self._root_app.project_folders
         for idx, row in enumerate(self._rows):
             if isinstance(row, str):
                 # Subfolder
@@ -129,7 +129,7 @@ class FolderScreen(Screen[None]):
                 severity="warning",
             )
             return
-        from multi_claude.screens.sessions import SessionsScreen
+        from ai_sessions_manager.screens.sessions import SessionsScreen
 
         self.app.push_screen(SessionsScreen(target))
 
@@ -170,7 +170,7 @@ class FolderScreen(Screen[None]):
     def _apply_new_subfolder(self, result: str | None) -> None:
         if result is None or result == "":
             return
-        store = self._claude_app.project_folders
+        store = self._root_app.project_folders
         full = f"{self.folder_path}/{result}"
         try:
             store.add_folder(full)
@@ -198,7 +198,7 @@ class FolderScreen(Screen[None]):
             )
             return
         # Project alias
-        store = self._claude_app.project_names
+        store = self._root_app.project_names
         current = store.for_project(target.encoded_path)
         self.app.push_screen(
             RenameModal(
@@ -213,7 +213,7 @@ class FolderScreen(Screen[None]):
     def _apply_rename_subfolder(self, old_path: str, result: str | None) -> None:
         if result is None:
             return
-        store = self._claude_app.project_folders
+        store = self._root_app.project_folders
         if result == "":
             # Empty = delete subfolder (cascade).
             with contextlib.suppress(KeyError):
@@ -232,7 +232,7 @@ class FolderScreen(Screen[None]):
     def _apply_rename_project(self, project: Project, result: str | None) -> None:
         if result is None:
             return
-        store = self._claude_app.project_names
+        store = self._root_app.project_names
         if result == "":
             store.delete_for_project(project.encoded_path)
             self.notify("Alias borrado")
@@ -246,7 +246,7 @@ class FolderScreen(Screen[None]):
         target = self._selected_row()
         if not isinstance(target, Project):
             return
-        self._claude_app.project_folders.unassign(target.encoded_path)
+        self._root_app.project_folders.unassign(target.encoded_path)
         self.notify(f"{target.name} quitado de {self.folder_path}")
         self._refresh_rows()
         self._repaint()
@@ -259,7 +259,7 @@ class FolderScreen(Screen[None]):
             self.notify("Selecciona una subcarpeta para borrar", severity="warning")
             return
         with contextlib.suppress(KeyError):
-            self._claude_app.project_folders.delete_folder(target)
+            self._root_app.project_folders.delete_folder(target)
         self.notify(f"Subcarpeta {target} eliminada (proyectos vuelven a root)")
         self._refresh_rows()
         self._repaint()

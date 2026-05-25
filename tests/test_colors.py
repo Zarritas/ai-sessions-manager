@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from multi_claude.colors import ColorRule, SessionColorsStore, resolve_style
-from multi_claude.session import Session
+from ai_sessions_manager.colors import ColorRule, SessionColorsStore, resolve_style
+from ai_sessions_manager.session import Session
 
 
 def _session(

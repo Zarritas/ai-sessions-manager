@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from multi_claude.filtering import FilterQuery, matches_fuzzy, parse_query
+from ai_sessions_manager.filtering import FilterQuery, matches_fuzzy, parse_query
 
 
 def test_parse_empty_query() -> None:

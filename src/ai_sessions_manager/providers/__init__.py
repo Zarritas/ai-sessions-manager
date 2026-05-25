@@ -1,9 +1,9 @@
-"""Registry of every CLI provider multi-claude knows about.
+"""Registry of every CLI provider ai-sessions-manager knows about.
 
 To plug in a new provider:
 
 1. Drop a module under ``providers/`` whose class implements
-   :class:`~multi_claude.providers.base.Provider`.
+   :class:`~ai_sessions_manager.providers.base.Provider`.
 2. Append an instance to :data:`ALL_PROVIDERS` below.
 
 :func:`detect_available` filters to the providers whose CLI is actually
@@ -14,9 +14,9 @@ hint so the user understands the empty state.
 
 from __future__ import annotations
 
-from multi_claude.providers.base import Provider
-from multi_claude.providers.claude import ClaudeProvider
-from multi_claude.providers.codex import CodexProvider
+from ai_sessions_manager.providers.base import Provider
+from ai_sessions_manager.providers.claude import ClaudeProvider
+from ai_sessions_manager.providers.codex import CodexProvider
 
 ALL_PROVIDERS: tuple[Provider, ...] = (
     ClaudeProvider(),

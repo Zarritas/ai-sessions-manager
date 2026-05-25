@@ -16,13 +16,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from multi_claude.discovery import Project
-from multi_claude.session import Session
+from ai_sessions_manager.discovery import Project
+from ai_sessions_manager.session import Session
 
 
 @runtime_checkable
 class Provider(Protocol):
-    """Contract for a CLI whose sessions multi-claude can browse and resume.
+    """Contract for a CLI whose sessions ai-sessions-manager can browse and resume.
 
     Implementations are typically lightweight value-objects: instance state is
     limited to paths and cached scan results. Each method is called from the

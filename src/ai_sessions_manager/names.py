@@ -1,11 +1,11 @@
 """Persistent display-name store for sessions.
 
 Claude Code's ``-n <name>`` flag is documented as runtime-only (shown in prompt
-box and resume picker) and does not persist to disk. multi-claude keeps its own
+box and resume picker) and does not persist to disk. ai-sessions-manager keeps its own
 mapping ``{session_id: name}`` so renaming survives across restarts.
 
 Default location follows the XDG Base Directory spec:
-``$XDG_CONFIG_HOME/multi-claude/names.json`` (fallback ``~/.config/...``).
+``$XDG_CONFIG_HOME/ai-sessions-manager/names.json`` (fallback ``~/.config/...``).
 """
 
 from __future__ import annotations
@@ -18,7 +18,7 @@ from pathlib import Path
 
 def default_path() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "multi-claude" / "names.json"
+    return Path(base) / "ai-sessions-manager" / "names.json"
 
 
 class NamesStore:

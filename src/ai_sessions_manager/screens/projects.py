@@ -13,21 +13,21 @@ from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input
 from textual.widgets.data_table import RowKey
 
-from multi_claude.app_protocol import AppProtocol
-from multi_claude.colors import ColorRule
-from multi_claude.config import Config, SortSpec
-from multi_claude.deletion import delete_project, list_active_sessions, merge_projects
-from multi_claude.discovery import (
+from ai_sessions_manager.app_protocol import AppProtocol
+from ai_sessions_manager.colors import ColorRule
+from ai_sessions_manager.config import Config, SortSpec
+from ai_sessions_manager.deletion import delete_project, list_active_sessions, merge_projects
+from ai_sessions_manager.discovery import (
     Project,
     ProjectFolder,
     WorktreeGroup,
     group_into_folders,
     group_worktrees,
 )
-from multi_claude.filtering import FilterQuery, matches_fuzzy, parse_query
-from multi_claude.formatting import format_relative_time
-from multi_claude.launcher import LauncherError, launch_session
-from multi_claude.modals import (
+from ai_sessions_manager.filtering import FilterQuery, matches_fuzzy, parse_query
+from ai_sessions_manager.formatting import format_relative_time
+from ai_sessions_manager.launcher import LauncherError, launch_session
+from ai_sessions_manager.modals import (
     AddProjectModal,
     AssignFolderModal,
     ColorRulesEditorModal,
@@ -73,7 +73,7 @@ class ProjectsScreen(Screen[None]):
         self._visible_indices: list[int] = []
 
     @property
-    def _claude_app(self) -> AppProtocol:
+    def _root_app(self) -> AppProtocol:
         return cast(AppProtocol, self.app)
 
     def compose(self) -> ComposeResult:
@@ -95,7 +95,7 @@ class ProjectsScreen(Screen[None]):
 
     @work(thread=True, exclusive=True, group="scan-projects")
     def _scan_projects_worker(self) -> None:
-        results = self._claude_app.provider.scan_projects()
+        results = self._root_app.provider.scan_projects()
         self.app.call_from_thread(self._on_scan_complete, results)
 
     def _on_scan_complete(self, projects: list[Project]) -> None:
@@ -108,15 +108,15 @@ class ProjectsScreen(Screen[None]):
         self._repaint()
 
     def _apply_sort(self) -> None:
-        spec = self._claude_app.prefs.projects_sort
+        spec = self._root_app.prefs.projects_sort
         self._projects.sort(key=_project_sort_value(spec.key), reverse=spec.descending)
         base_rows: list[Project | WorktreeGroup]
-        if self._claude_app.prefs.group_worktrees:
+        if self._root_app.prefs.group_worktrees:
             base_rows = group_worktrees(self._projects)
         else:
             base_rows = list(self._projects)
         # Pull folder-assigned projects out of base_rows into ProjectFolder rows.
-        folder_of = self._claude_app.project_folders.all_assignments()
+        folder_of = self._root_app.project_folders.all_assignments()
         if folder_of:
             self._rows = group_into_folders(base_rows, folder_of)
         else:
@@ -141,7 +141,7 @@ class ProjectsScreen(Screen[None]):
     def _format_row(
         self, row_item: Project | WorktreeGroup | ProjectFolder
     ) -> tuple[str, str, str, str]:
-        store = self._claude_app.project_names
+        store = self._root_app.project_names
         if isinstance(row_item, ProjectFolder):
             total = row_item.total_member_count
             if row_item.descendant_member_count:
@@ -182,7 +182,7 @@ class ProjectsScreen(Screen[None]):
     def _matches(
         self, row_item: Project | WorktreeGroup | ProjectFolder, query: FilterQuery
     ) -> bool:
-        store = self._claude_app.project_names
+        store = self._root_app.project_names
         if isinstance(row_item, ProjectFolder):
             names = " ".join(m.name for m in row_item.members)
             paths = " ".join(str(m.path) for m in row_item.members)
@@ -214,12 +214,12 @@ class ProjectsScreen(Screen[None]):
         if row_item is None:
             return
         if isinstance(row_item, ProjectFolder):
-            from multi_claude.screens.folder import FolderScreen
+            from ai_sessions_manager.screens.folder import FolderScreen
 
             self.app.push_screen(FolderScreen(row_item.name))
             return
         if isinstance(row_item, WorktreeGroup):
-            from multi_claude.screens.worktrees import WorktreesScreen
+            from ai_sessions_manager.screens.worktrees import WorktreesScreen
 
             self.app.push_screen(WorktreesScreen(row_item))
             return
@@ -230,7 +230,7 @@ class ProjectsScreen(Screen[None]):
                 severity="warning",
             )
             return
-        from multi_claude.screens.sessions import SessionsScreen
+        from ai_sessions_manager.screens.sessions import SessionsScreen
 
         self.app.push_screen(SessionsScreen(project))
 
@@ -262,13 +262,13 @@ class ProjectsScreen(Screen[None]):
     def _apply_add_project(self, path: Path | None) -> None:
         if path is None:
             return
-        provider = self._claude_app.provider
+        provider = self._root_app.provider
         try:
             launch_session(
                 provider.new_argv(),
                 path,
                 app=self.app,
-                mode=self._claude_app.prefs.default_mode,
+                mode=self._root_app.prefs.default_mode,
             )
         except LauncherError as exc:
             self.notify(str(exc), severity="error")
@@ -277,14 +277,14 @@ class ProjectsScreen(Screen[None]):
 
     def action_settings(self) -> None:
         self.app.push_screen(
-            SettingsModal(self._claude_app.prefs),
+            SettingsModal(self._root_app.prefs),
             self._apply_settings,
         )
 
     def _apply_settings(self, result: Config | None) -> None:
         if result is None:
             return
-        self._claude_app.update_prefs(result)
+        self._root_app.update_prefs(result)
         self._apply_sort()
         self._repaint()
         self.notify("Ajustes guardados")
@@ -365,29 +365,29 @@ class ProjectsScreen(Screen[None]):
     def action_sort_column(self, key: str) -> None:
         if key not in _SORT_KEYS_BY_COLUMN:
             return
-        spec = self._claude_app.prefs.projects_sort
+        spec = self._root_app.prefs.projects_sort
         if spec.key == key:
             new_spec = SortSpec(key=key, descending=not spec.descending)
         else:
             new_spec = SortSpec(key=key, descending=True)
         new_prefs = Config(
-            default_mode=self._claude_app.prefs.default_mode,
+            default_mode=self._root_app.prefs.default_mode,
             projects_sort=new_spec,
-            sessions_sort=self._claude_app.prefs.sessions_sort,
-            preview_visible=self._claude_app.prefs.preview_visible,
-            group_worktrees=self._claude_app.prefs.group_worktrees,
+            sessions_sort=self._root_app.prefs.sessions_sort,
+            preview_visible=self._root_app.prefs.preview_visible,
+            group_worktrees=self._root_app.prefs.group_worktrees,
         )
-        self._claude_app.update_prefs(new_prefs)
+        self._root_app.update_prefs(new_prefs)
         self._apply_sort()
         self._repaint()
         self.notify(f"Orden: {key} {'desc' if new_spec.descending else 'asc'}")
 
     def action_toggle_sort_direction(self) -> None:
-        spec = self._claude_app.prefs.projects_sort
+        spec = self._root_app.prefs.projects_sort
         self.action_sort_column(spec.key)
 
     def action_toggle_groups(self) -> None:
-        prefs = self._claude_app.prefs
+        prefs = self._root_app.prefs
         new_prefs = Config(
             default_mode=prefs.default_mode,
             projects_sort=prefs.projects_sort,
@@ -395,27 +395,27 @@ class ProjectsScreen(Screen[None]):
             preview_visible=prefs.preview_visible,
             group_worktrees=not prefs.group_worktrees,
         )
-        self._claude_app.update_prefs(new_prefs)
+        self._root_app.update_prefs(new_prefs)
         self._apply_sort()
         self._repaint()
         state = "agrupados" if new_prefs.group_worktrees else "expandidos"
         self.notify(f"Worktrees {state}")
 
     def action_search_global(self) -> None:
-        from multi_claude.screens.search import SearchScreen
+        from ai_sessions_manager.screens.search import SearchScreen
 
         self.app.push_screen(SearchScreen())
 
     def action_edit_color_rules(self) -> None:
         self.app.push_screen(
-            ColorRulesEditorModal(list(self._claude_app.prefs.color_rules)),
+            ColorRulesEditorModal(list(self._root_app.prefs.color_rules)),
             self._apply_color_rules,
         )
 
     def _apply_color_rules(self, result: list[ColorRule] | None) -> None:
         if result is None:
             return
-        prefs = self._claude_app.prefs
+        prefs = self._root_app.prefs
         new_prefs = Config(
             default_mode=prefs.default_mode,
             projects_sort=prefs.projects_sort,
@@ -424,14 +424,14 @@ class ProjectsScreen(Screen[None]):
             group_worktrees=prefs.group_worktrees,
             color_rules=result,
         )
-        self._claude_app.update_prefs(new_prefs)
+        self._root_app.update_prefs(new_prefs)
         self.notify(f"Reglas guardadas ({len(result)})")
 
     def action_rename(self) -> None:
         row = self._selected_row()
         if row is None:
             return
-        store = self._claude_app.project_names
+        store = self._root_app.project_names
         if isinstance(row, ProjectFolder):
             self.app.push_screen(
                 RenameModal(
@@ -475,11 +475,11 @@ class ProjectsScreen(Screen[None]):
             import contextlib
 
             with contextlib.suppress(KeyError):
-                self._claude_app.project_folders.delete_folder(folder.name)
+                self._root_app.project_folders.delete_folder(folder.name)
             self.notify(f"Carpeta {folder.name} eliminada")
         else:
             try:
-                self._claude_app.project_folders.rename_folder(folder.name, result)
+                self._root_app.project_folders.rename_folder(folder.name, result)
             except (KeyError, ValueError) as exc:
                 self.notify(f"Error: {exc}", severity="error")
                 return
@@ -490,7 +490,7 @@ class ProjectsScreen(Screen[None]):
     def _apply_rename_group(self, group: WorktreeGroup, result: str | None) -> None:
         if result is None:
             return
-        store = self._claude_app.project_names
+        store = self._root_app.project_names
         if result == "":
             store.delete_for_repo(group.repo_root)
             self.notify("Alias borrado")
@@ -502,7 +502,7 @@ class ProjectsScreen(Screen[None]):
     def _apply_rename_project(self, project: Project, result: str | None) -> None:
         if result is None:
             return
-        store = self._claude_app.project_names
+        store = self._root_app.project_names
         if result == "":
             store.delete_for_project(project.encoded_path)
             self.notify("Alias borrado")
@@ -519,7 +519,7 @@ class ProjectsScreen(Screen[None]):
                 severity="warning",
             )
             return
-        store = self._claude_app.project_folders
+        store = self._root_app.project_folders
         current = store.folder_of(project.encoded_path)
         modal = AssignFolderModal(
             subtitle=f"{project.name} — {project.path}",
@@ -531,7 +531,7 @@ class ProjectsScreen(Screen[None]):
     def _apply_assign_folder(self, project: Project, result: str | None) -> None:
         if result is None:
             return
-        store = self._claude_app.project_folders
+        store = self._root_app.project_folders
         if result == "":
             store.unassign(project.encoded_path)
             self.notify(f"{project.name} quitado de su carpeta")
@@ -561,7 +561,7 @@ class ProjectsScreen(Screen[None]):
             self.notify(f"Error en merge: {exc}", severity="error")
             return
         # Transfer orphan's alias to the destination if the destination has none yet.
-        store = self._claude_app.project_names
+        store = self._root_app.project_names
         orphan_alias = store.for_project(orphan.encoded_path)
         if orphan_alias is not None and store.for_project(destination.encoded_path) is None:
             store.set_for_project(destination.encoded_path, orphan_alias)

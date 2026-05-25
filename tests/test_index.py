@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from multi_claude.index import IndexedSession, SessionIndex
+from ai_sessions_manager.index import IndexedSession, SessionIndex
 
 
 @pytest.fixture

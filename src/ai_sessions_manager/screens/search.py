@@ -12,10 +12,10 @@ from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input
 from textual.widgets.data_table import RowKey
 
-from multi_claude.app_protocol import AppProtocol
-from multi_claude.discovery import Project
-from multi_claude.formatting import format_relative_time
-from multi_claude.index import IndexedSession, default_index
+from ai_sessions_manager.app_protocol import AppProtocol
+from ai_sessions_manager.discovery import Project
+from ai_sessions_manager.formatting import format_relative_time
+from ai_sessions_manager.index import IndexedSession, default_index
 
 
 class SearchScreen(Screen[None]):
@@ -88,7 +88,7 @@ class SearchScreen(Screen[None]):
         if project is None:
             self.notify("No encuentro el proyecto correspondiente", severity="warning")
             return
-        from multi_claude.screens.sessions import SessionsScreen
+        from ai_sessions_manager.screens.sessions import SessionsScreen
 
         self.app.pop_screen()  # back to ProjectsScreen
         self.app.push_screen(SessionsScreen(project))

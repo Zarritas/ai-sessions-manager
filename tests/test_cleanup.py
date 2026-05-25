@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from multi_claude.modals import _CLEANUP_PRESETS, _DEFAULT_PRESET_IDX, _parse_iso_date
+from ai_sessions_manager.modals import _CLEANUP_PRESETS, _DEFAULT_PRESET_IDX, _parse_iso_date
 
 
 def test_parse_iso_date_valid() -> None:

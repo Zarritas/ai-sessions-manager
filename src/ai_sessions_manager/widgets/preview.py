@@ -10,7 +10,7 @@ from textual.containers import VerticalScroll
 from textual.widget import Widget
 from textual.widgets import Static
 
-from multi_claude.session import strip_command_wrappers
+from ai_sessions_manager.session import strip_command_wrappers
 
 PREVIEW_LAST_LINES = 60
 PREVIEW_TURN_LIMIT = 12

@@ -108,7 +108,7 @@ Prioridad dentro de `auto`: `tmux` > `zellij` > `terminator-tab` > `window` > `s
 
 ## Configuración persistente
 
-`~/.config/multi-claude/config.json` (o `$XDG_CONFIG_HOME/multi-claude/config.json`):
+`~/.config/ai-sessions-manager/config.json` (o `$XDG_CONFIG_HOME/ai-sessions-manager/config.json`):
 
 ```json
 {
@@ -133,7 +133,7 @@ Prioridad dentro de `auto`: `tmux` > `zellij` > `terminator-tab` > `window` > `s
 ## Layout Textual
 
 ```
-ClaudeBrowserApp
+AiSessionsApp
 ├── ProjectsScreen (initial)
 │   ├── Header
 │   ├── DataTable
@@ -155,7 +155,7 @@ ClaudeBrowserApp
 5. `SessionsScreen` con scan real, sin acciones.
 6. Wiring de Enter / n / launcher.
 7. Manejo de huérfanos (estilos + bloqueo de actions).
-8. Pruebas end-to-end manuales con `uv run multi-claude`.
+8. Pruebas end-to-end manuales con `uv run ai-sessions-manager`.
 
 ## Lo que queda fuera (v2+)
 

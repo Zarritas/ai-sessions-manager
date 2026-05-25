@@ -1,11 +1,11 @@
-"""Tests for multi_claude.session."""
+"""Tests for ai_sessions_manager.session."""
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from multi_claude.names import NamesStore
-from multi_claude.session import (
+from ai_sessions_manager.names import NamesStore
+from ai_sessions_manager.session import (
     count_lines,
     parse_session_header,
     scan_sessions,

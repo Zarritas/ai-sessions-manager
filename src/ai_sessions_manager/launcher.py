@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from multi_claude.config import LaunchMode
+from ai_sessions_manager.config import LaunchMode
 
 if TYPE_CHECKING:
     from textual.app import App

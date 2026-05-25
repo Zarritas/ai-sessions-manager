@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from multi_claude.deletion import merge_projects
+from ai_sessions_manager.deletion import merge_projects
 from tests.conftest import write_session
 
 

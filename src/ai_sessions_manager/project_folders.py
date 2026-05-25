@@ -8,7 +8,7 @@ A project not assigned to anything lives at the root level, as before.
 
 Storage:
 
-    ~/.config/multi-claude/project-folders.json
+    ~/.config/ai-sessions-manager/project-folders.json
 
     {
         "folders": ["Trabajo", "Trabajo/Cliente A"],
@@ -41,7 +41,7 @@ SEPARATOR = "/"
 
 def default_path() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "multi-claude" / "project-folders.json"
+    return Path(base) / "ai-sessions-manager" / "project-folders.json"
 
 
 def _split(path: str) -> list[str]:

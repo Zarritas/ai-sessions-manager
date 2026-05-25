@@ -22,7 +22,7 @@ from pathlib import Path
 
 def default_path() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
-    return Path(base) / "multi-claude" / "project-names.json"
+    return Path(base) / "ai-sessions-manager" / "project-names.json"
 
 
 def project_key(encoded_path: Path) -> str:
@@ -36,7 +36,7 @@ def repo_key(repo_root: Path) -> str:
 class ProjectNamesStore:
     """File-backed dict for project / worktree-group aliases.
 
-    Same atomic-write + lazy-load pattern as :class:`multi_claude.names.NamesStore`.
+    Same atomic-write + lazy-load pattern as :class:`ai_sessions_manager.names.NamesStore`.
     """
 
     def __init__(self, path: Path | None = None) -> None:

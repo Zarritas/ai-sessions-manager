@@ -11,10 +11,10 @@ from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header
 from textual.widgets.data_table import RowKey
 
-from multi_claude.app_protocol import AppProtocol
-from multi_claude.discovery import Project, WorktreeGroup
-from multi_claude.formatting import format_relative_time
-from multi_claude.modals import RenameModal
+from ai_sessions_manager.app_protocol import AppProtocol
+from ai_sessions_manager.discovery import Project, WorktreeGroup
+from ai_sessions_manager.formatting import format_relative_time
+from ai_sessions_manager.modals import RenameModal
 
 
 class WorktreesScreen(Screen[None]):
@@ -33,7 +33,7 @@ class WorktreesScreen(Screen[None]):
         self._members: tuple[Project, ...] = group.members
 
     @property
-    def _claude_app(self) -> AppProtocol:
+    def _root_app(self) -> AppProtocol:
         return cast(AppProtocol, self.app)
 
     def compose(self) -> ComposeResult:
@@ -42,7 +42,7 @@ class WorktreesScreen(Screen[None]):
         yield Footer()
 
     def on_mount(self) -> None:
-        group_alias = self._claude_app.project_names.for_repo(self.group.repo_root)
+        group_alias = self._root_app.project_names.for_repo(self.group.repo_root)
         repo_label = group_alias or self.group.repo_root.name or str(self.group.repo_root)
         self.sub_title = f"{repo_label} — {self.group.repo_root}"
         table = self.query_one("#worktrees", DataTable)
@@ -53,7 +53,7 @@ class WorktreesScreen(Screen[None]):
     def _repaint(self) -> None:
         table = self.query_one("#worktrees", DataTable)
         table.clear()
-        store = self._claude_app.project_names
+        store = self._root_app.project_names
         for idx, project in enumerate(self._members):
             display = store.for_project(project.encoded_path) or project.name
             table.add_row(
@@ -69,7 +69,7 @@ class WorktreesScreen(Screen[None]):
         project = self._project_for_row(event.row_key)
         if project is None:
             return
-        from multi_claude.screens.sessions import SessionsScreen
+        from ai_sessions_manager.screens.sessions import SessionsScreen
 
         self.app.push_screen(SessionsScreen(project))
 
@@ -93,7 +93,7 @@ class WorktreesScreen(Screen[None]):
         worktree = self._selected_worktree()
         if worktree is None:
             return
-        store = self._claude_app.project_names
+        store = self._root_app.project_names
         current = store.for_project(worktree.encoded_path)
         self.app.push_screen(
             RenameModal(
@@ -108,7 +108,7 @@ class WorktreesScreen(Screen[None]):
     def _apply_rename(self, worktree: Project, result: str | None) -> None:
         if result is None:
             return  # cancelled
-        store = self._claude_app.project_names
+        store = self._root_app.project_names
         if result == "":
             store.delete_for_project(worktree.encoded_path)
             self.notify("Alias borrado")

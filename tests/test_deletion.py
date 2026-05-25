@@ -1,4 +1,4 @@
-"""Tests for multi_claude.deletion."""
+"""Tests for ai_sessions_manager.deletion."""
 
 from __future__ import annotations
 
@@ -7,14 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from multi_claude.deletion import (
+from ai_sessions_manager.deletion import (
     SessionActiveError,
     delete_project,
     delete_session,
     list_active_sessions,
 )
-from multi_claude.index import SessionIndex
-from multi_claude.names import NamesStore
+from ai_sessions_manager.index import SessionIndex
+from ai_sessions_manager.names import NamesStore
 from tests.conftest import write_session
 
 

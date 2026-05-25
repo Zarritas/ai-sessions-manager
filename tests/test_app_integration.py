@@ -7,9 +7,9 @@ from unittest.mock import patch
 
 import pytest
 
-from multi_claude import discovery as discovery_module
-from multi_claude.app import ClaudeBrowserApp
-from multi_claude.names import NamesStore
+from ai_sessions_manager import discovery as discovery_module
+from ai_sessions_manager.app import AiSessionsApp
+from ai_sessions_manager.names import NamesStore
 from tests.conftest import write_session
 
 
@@ -55,11 +55,11 @@ def synthetic_world(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 async def test_app_lists_projects_and_navigates(synthetic_world: Path) -> None:
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         # ProjectsScreen mounted
-        from multi_claude.screens.projects import ProjectsScreen
+        from ai_sessions_manager.screens.projects import ProjectsScreen
 
         projects_screen = app.screen
         assert isinstance(projects_screen, ProjectsScreen)
@@ -74,7 +74,7 @@ async def test_app_lists_projects_and_navigates(synthetic_world: Path) -> None:
         table.action_select_cursor()
         await pilot.pause()
 
-        from multi_claude.screens.sessions import SessionsScreen
+        from ai_sessions_manager.screens.sessions import SessionsScreen
 
         assert isinstance(app.screen, SessionsScreen)
         assert app.screen.project.name == "beta"
@@ -93,10 +93,10 @@ async def test_app_handles_empty_projects(tmp_path: Path, monkeypatch: pytest.Mo
     empty.mkdir()
     monkeypatch.setattr(discovery_module, "CLAUDE_PROJECTS_DIR", empty)
 
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
-        from multi_claude.screens.projects import ProjectsScreen
+        from ai_sessions_manager.screens.projects import ProjectsScreen
 
         assert isinstance(app.screen, ProjectsScreen)
         assert app.screen._projects == []
@@ -109,16 +109,16 @@ async def test_app_orphan_project_blocks_open(
     projects_root.mkdir()
     write_session(
         projects_root / "-gone",
-        cwd="/this/does/not/exist/anywhere/multi-claude-test",
+        cwd="/this/does/not/exist/anywhere/ai-sessions-manager-test",
     )
     monkeypatch.setattr(discovery_module, "CLAUDE_PROJECTS_DIR", projects_root)
 
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         from textual.widgets import DataTable
 
-        from multi_claude.screens.projects import ProjectsScreen
+        from ai_sessions_manager.screens.projects import ProjectsScreen
 
         assert isinstance(app.screen, ProjectsScreen)
         assert app.screen._projects[0].is_orphan is True
@@ -133,7 +133,7 @@ async def test_app_orphan_project_blocks_open(
 
 async def test_filter_in_projects_screen(synthetic_world: Path) -> None:
     """`/` opens filter input; typing narrows the visible rows."""
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         await pilot.press("slash")
@@ -162,7 +162,7 @@ async def test_filter_in_projects_screen(synthetic_world: Path) -> None:
 
 async def test_filter_keeps_focus_on_input_while_typing(synthetic_world: Path) -> None:
     """Regression: filtering on each keystroke must not steal focus from the input."""
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         from textual.widgets import Input
@@ -184,7 +184,7 @@ async def test_filter_keeps_focus_on_input_while_typing(synthetic_world: Path) -
 
 async def test_filter_in_sessions_screen(synthetic_world: Path) -> None:
     """`/` works inside SessionsScreen too."""
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         from textual.widgets import DataTable, Input
@@ -194,7 +194,7 @@ async def test_filter_in_sessions_screen(synthetic_world: Path) -> None:
         table.action_select_cursor()
         await pilot.pause()
 
-        from multi_claude.screens.sessions import SessionsScreen
+        from ai_sessions_manager.screens.sessions import SessionsScreen
 
         assert isinstance(app.screen, SessionsScreen)
 
@@ -210,7 +210,7 @@ async def test_filter_in_sessions_screen(synthetic_world: Path) -> None:
 
 async def test_rename_session_via_modal(synthetic_world: Path, tmp_path: Path) -> None:
     """`e` opens RenameModal; submitting writes to NamesStore."""
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         from textual.widgets import DataTable, Input
@@ -219,7 +219,7 @@ async def test_rename_session_via_modal(synthetic_world: Path, tmp_path: Path) -
         app.screen.query_one("#projects", DataTable).action_select_cursor()
         await pilot.pause()
 
-        from multi_claude.screens.sessions import SessionsScreen
+        from ai_sessions_manager.screens.sessions import SessionsScreen
 
         assert isinstance(app.screen, SessionsScreen)
 
@@ -227,7 +227,7 @@ async def test_rename_session_via_modal(synthetic_world: Path, tmp_path: Path) -
         await pilot.press("e")
         await pilot.pause()
 
-        from multi_claude.modals import RenameModal
+        from ai_sessions_manager.modals import RenameModal
 
         assert isinstance(app.screen, RenameModal)
         modal_input = app.screen.query_one("#name-input", Input)
@@ -248,7 +248,7 @@ async def test_rename_session_empty_input_deletes_name(synthetic_world: Path) ->
     store = NamesStore()
     store.set("ses-beta-1", "old name")
 
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         from textual.widgets import DataTable, Input
@@ -266,7 +266,7 @@ async def test_rename_session_empty_input_deletes_name(synthetic_world: Path) ->
 
 async def test_delete_session_with_confirmation(synthetic_world: Path) -> None:
     """`d` opens ConfirmDeleteModal; `y` deletes the session."""
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         from textual.widgets import DataTable
@@ -274,7 +274,7 @@ async def test_delete_session_with_confirmation(synthetic_world: Path) -> None:
         app.screen.query_one("#projects", DataTable).action_select_cursor()
         await pilot.pause()
 
-        from multi_claude.screens.sessions import SessionsScreen
+        from ai_sessions_manager.screens.sessions import SessionsScreen
 
         sessions_screen = app.screen
         assert isinstance(sessions_screen, SessionsScreen)
@@ -284,7 +284,7 @@ async def test_delete_session_with_confirmation(synthetic_world: Path) -> None:
         await pilot.press("d")
         await pilot.pause()
 
-        from multi_claude.modals import ConfirmDeleteModal
+        from ai_sessions_manager.modals import ConfirmDeleteModal
 
         assert isinstance(app.screen, ConfirmDeleteModal)
 
@@ -297,7 +297,7 @@ async def test_delete_session_with_confirmation(synthetic_world: Path) -> None:
 
 
 async def test_delete_session_cancel_keeps_session(synthetic_world: Path) -> None:
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         from textual.widgets import DataTable
@@ -305,7 +305,7 @@ async def test_delete_session_cancel_keeps_session(synthetic_world: Path) -> Non
         app.screen.query_one("#projects", DataTable).action_select_cursor()
         await pilot.pause()
 
-        from multi_claude.screens.sessions import SessionsScreen
+        from ai_sessions_manager.screens.sessions import SessionsScreen
 
         sessions_screen = app.screen
         assert isinstance(sessions_screen, SessionsScreen)
@@ -322,7 +322,7 @@ async def test_delete_session_cancel_keeps_session(synthetic_world: Path) -> Non
 
 async def test_delete_project_with_confirmation(synthetic_world: Path) -> None:
     """`d` on ProjectsScreen wipes the project directory."""
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         initial_projects = list(app.screen._projects)
@@ -331,13 +331,13 @@ async def test_delete_project_with_confirmation(synthetic_world: Path) -> None:
         await pilot.press("d")
         await pilot.pause()
 
-        from multi_claude.modals import ConfirmDeleteModal
+        from ai_sessions_manager.modals import ConfirmDeleteModal
 
         assert isinstance(app.screen, ConfirmDeleteModal)
         await pilot.press("y")
         await pilot.pause()
 
-        from multi_claude.screens.projects import ProjectsScreen
+        from ai_sessions_manager.screens.projects import ProjectsScreen
 
         assert isinstance(app.screen, ProjectsScreen)
         assert len(app.screen._projects) == len(initial_projects) - 1
@@ -360,8 +360,8 @@ async def test_add_project_invokes_launcher(synthetic_world: Path, tmp_path: Pat
         captured["session_id"] = session_id
         captured["mode"] = mode
 
-    with patch("multi_claude.screens.projects.launch_claude", side_effect=fake_launch):
-        app = ClaudeBrowserApp()
+    with patch("ai_sessions_manager.screens.projects.launch_claude", side_effect=fake_launch):
+        app = AiSessionsApp()
         async with app.run_test() as pilot:
             await pilot.pause()
             await pilot.press("a")
@@ -369,7 +369,7 @@ async def test_add_project_invokes_launcher(synthetic_world: Path, tmp_path: Pat
 
             from textual.widgets import Input
 
-            from multi_claude.modals import AddProjectModal
+            from ai_sessions_manager.modals import AddProjectModal
 
             assert isinstance(app.screen, AddProjectModal)
             modal_input = app.screen.query_one("#path-input", Input)
@@ -383,7 +383,7 @@ async def test_add_project_invokes_launcher(synthetic_world: Path, tmp_path: Pat
 
 async def test_add_project_rejects_missing_path(synthetic_world: Path, tmp_path: Path) -> None:
     """A non-existent path keeps the modal open with an error message."""
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         await pilot.press("a")
@@ -391,7 +391,7 @@ async def test_add_project_rejects_missing_path(synthetic_world: Path, tmp_path:
 
         from textual.widgets import Input, Label
 
-        from multi_claude.modals import AddProjectModal
+        from ai_sessions_manager.modals import AddProjectModal
 
         assert isinstance(app.screen, AddProjectModal)
         modal_input = app.screen.query_one("#path-input", Input)
@@ -406,7 +406,7 @@ async def test_add_project_rejects_missing_path(synthetic_world: Path, tmp_path:
 
 
 async def test_ctrl_q_quits_app(synthetic_world: Path) -> None:
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         await pilot.press("ctrl+q")
@@ -424,15 +424,15 @@ async def test_enter_uses_default_mode_and_shift_enter_uses_opposite(
     def fake_launch(cwd, session_id, *, display_name=None, app=None, mode="auto"):
         captured.append({"session_id": session_id, "mode": mode})
 
-    with patch("multi_claude.screens.sessions.launch_claude", side_effect=fake_launch):
-        app = ClaudeBrowserApp()
+    with patch("ai_sessions_manager.screens.sessions.launch_claude", side_effect=fake_launch):
+        app = AiSessionsApp()
         async with app.run_test() as pilot:
             await pilot.pause()
             # Drill into the first project (beta).
             from textual.widgets import DataTable
 
-            from multi_claude.screens.projects import ProjectsScreen
-            from multi_claude.screens.sessions import SessionsScreen
+            from ai_sessions_manager.screens.projects import ProjectsScreen
+            from ai_sessions_manager.screens.sessions import SessionsScreen
 
             assert isinstance(app.screen, ProjectsScreen)
             app.screen.query_one("#projects", DataTable).action_select_cursor()
@@ -455,9 +455,9 @@ async def test_enter_uses_default_mode_and_shift_enter_uses_opposite(
 
 async def test_settings_modal_persists_changes(synthetic_world: Path, tmp_path: Path) -> None:
     """Open settings, switch default to 'window', save → prefs and disk updated."""
-    from multi_claude.config import load_config
+    from ai_sessions_manager.config import load_config
 
-    app = ClaudeBrowserApp()
+    app = AiSessionsApp()
     async with app.run_test() as pilot:
         await pilot.pause()
         await pilot.press("s")
@@ -465,7 +465,7 @@ async def test_settings_modal_persists_changes(synthetic_world: Path, tmp_path: 
 
         from textual.widgets import RadioButton
 
-        from multi_claude.modals import SettingsModal
+        from ai_sessions_manager.modals import SettingsModal
 
         assert isinstance(app.screen, SettingsModal)
         # Select "window" in the default-mode set.

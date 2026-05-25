@@ -18,9 +18,9 @@ from textual.binding import Binding
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header
 
-from multi_claude.app_protocol import AppProtocol
-from multi_claude.providers import detect_available
-from multi_claude.providers.base import Provider
+from ai_sessions_manager.app_protocol import AppProtocol
+from ai_sessions_manager.providers import detect_available
+from ai_sessions_manager.providers.base import Provider
 
 
 class ProviderSelectScreen(Screen[None]):
@@ -37,7 +37,7 @@ class ProviderSelectScreen(Screen[None]):
         self._providers: list[Provider] = []
 
     @property
-    def _claude_app(self) -> AppProtocol:
+    def _root_app(self) -> AppProtocol:
         return cast(AppProtocol, self.app)
 
     def compose(self) -> ComposeResult:
@@ -61,7 +61,7 @@ class ProviderSelectScreen(Screen[None]):
             table.add_row(
                 "(ninguno detectado)",
                 "—",
-                "Instala `claude` o `codex` y vuelve a abrir multi-claude",
+                "Instala `claude` o `codex` y vuelve a abrir ai-sessions-manager",
             )
             return
         for prov in self._providers:
@@ -91,8 +91,8 @@ class ProviderSelectScreen(Screen[None]):
             return
         chosen = self._providers[row_idx]
         # Mutate the app's provider in place so every subsequent screen sees it.
-        self._claude_app.provider = chosen
-        from multi_claude.screens.projects import ProjectsScreen
+        self._root_app.provider = chosen
+        from ai_sessions_manager.screens.projects import ProjectsScreen
 
         self.app.push_screen(ProjectsScreen())
 

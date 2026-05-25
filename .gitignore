@@ -16,4 +16,4 @@ htmlcov/
 .DS_Store
 
 # hatch-vcs writes this on install; the value comes from git tags.
-src/multi_claude/_version.py
+src/ai_sessions_manager/_version.py

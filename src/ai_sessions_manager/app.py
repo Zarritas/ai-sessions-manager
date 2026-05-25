@@ -4,20 +4,20 @@ from __future__ import annotations
 
 from textual.app import App
 
-from multi_claude.colors import SessionColorsStore
-from multi_claude.config import Config, load_config, save_config
-from multi_claude.names import NamesStore
-from multi_claude.project_folders import ProjectFoldersStore
-from multi_claude.project_names import ProjectNamesStore
-from multi_claude.providers.base import Provider
-from multi_claude.providers.claude import ClaudeProvider
+from ai_sessions_manager.colors import SessionColorsStore
+from ai_sessions_manager.config import Config, load_config, save_config
+from ai_sessions_manager.names import NamesStore
+from ai_sessions_manager.project_folders import ProjectFoldersStore
+from ai_sessions_manager.project_names import ProjectNamesStore
+from ai_sessions_manager.providers.base import Provider
+from ai_sessions_manager.providers.claude import ClaudeProvider
 
 
-class ClaudeBrowserApp(App[None]):
+class AiSessionsApp(App[None]):
     """Root app. Pushes ProviderSelectScreen at startup; ProjectsScreen is pushed on selection."""
 
     CSS_PATH = "styles.tcss"
-    TITLE = "multi-claude"
+    TITLE = "ai-sessions-manager"
 
     def __init__(self) -> None:
         super().__init__()
@@ -33,7 +33,7 @@ class ClaudeBrowserApp(App[None]):
         self.provider: Provider = ClaudeProvider()
 
     def on_mount(self) -> None:
-        from multi_claude.screens.providers import ProviderSelectScreen
+        from ai_sessions_manager.screens.providers import ProviderSelectScreen
 
         self.push_screen(ProviderSelectScreen())
 

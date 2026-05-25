@@ -29,6 +29,6 @@ jobs:
       - name: Ruff format
         run: ruff format --check .
       - name: Mypy
-        run: mypy src/multi_claude
+        run: mypy src/ai_sessions_manager
       - name: Pytest
         run: pytest -q

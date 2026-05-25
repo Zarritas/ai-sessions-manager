@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from multi_claude.discovery import Project, WorktreeGroup, group_worktrees
+from ai_sessions_manager.discovery import Project, WorktreeGroup, group_worktrees
 
 
 def _p(name: str, *, common: Path | None) -> Project:

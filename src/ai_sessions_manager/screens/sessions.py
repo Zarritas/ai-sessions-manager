@@ -12,16 +12,16 @@ from textual.containers import Horizontal
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Input
 
-from multi_claude.app_protocol import AppProtocol
-from multi_claude.clipboard import ClipboardError, copy_to_clipboard
-from multi_claude.colors import ColorRule, resolve_style
-from multi_claude.config import Config, LaunchMode, SortSpec, alternate_for
-from multi_claude.deletion import delete_session, list_active_sessions
-from multi_claude.discovery import Project
-from multi_claude.filtering import FilterQuery, matches_fuzzy, parse_query
-from multi_claude.formatting import format_relative_time, format_size
-from multi_claude.launcher import LauncherError, launch_session
-from multi_claude.modals import (
+from ai_sessions_manager.app_protocol import AppProtocol
+from ai_sessions_manager.clipboard import ClipboardError, copy_to_clipboard
+from ai_sessions_manager.colors import ColorRule, resolve_style
+from ai_sessions_manager.config import Config, LaunchMode, SortSpec, alternate_for
+from ai_sessions_manager.deletion import delete_session, list_active_sessions
+from ai_sessions_manager.discovery import Project
+from ai_sessions_manager.filtering import FilterQuery, matches_fuzzy, parse_query
+from ai_sessions_manager.formatting import format_relative_time, format_size
+from ai_sessions_manager.launcher import LauncherError, launch_session
+from ai_sessions_manager.modals import (
     CleanupModal,
     ColorPickerModal,
     ColorRulesEditorModal,
@@ -29,8 +29,8 @@ from multi_claude.modals import (
     RenameModal,
     SettingsModal,
 )
-from multi_claude.session import Session
-from multi_claude.widgets.preview import SessionPreview
+from ai_sessions_manager.session import Session
+from ai_sessions_manager.widgets.preview import SessionPreview
 
 _SORT_KEYS_BY_COLUMN: tuple[str, ...] = ("prompt", "branch", "messages", "size", "last_activity")
 
@@ -70,7 +70,7 @@ class SessionsScreen(Screen[None]):
         self._active_session_ids: set[str] = set()
 
     @property
-    def _claude_app(self) -> AppProtocol:
+    def _root_app(self) -> AppProtocol:
         return cast(AppProtocol, self.app)
 
     def compose(self) -> ComposeResult:
@@ -92,7 +92,7 @@ class SessionsScreen(Screen[None]):
 
     def _apply_preview_visibility(self) -> None:
         preview = self.query_one("#preview", SessionPreview)
-        preview.display = self._claude_app.prefs.preview_visible
+        preview.display = self._root_app.prefs.preview_visible
 
     def _populate(self) -> None:
         self.sub_title = f"{self.project.name} — escaneando…"
@@ -100,7 +100,7 @@ class SessionsScreen(Screen[None]):
 
     @work(thread=True, exclusive=True, group="scan-sessions")
     def _scan_sessions_worker(self) -> None:
-        results = self._claude_app.provider.scan_sessions(self.project)
+        results = self._root_app.provider.scan_sessions(self.project)
         self.app.call_from_thread(self._on_scan_complete, results)
 
     def _on_scan_complete(self, sessions: list[Session]) -> None:
@@ -111,7 +111,7 @@ class SessionsScreen(Screen[None]):
         self._repaint()
 
     def _apply_sort(self) -> None:
-        spec = self._claude_app.prefs.sessions_sort
+        spec = self._root_app.prefs.sessions_sort
         self._sessions.sort(key=_session_sort_value(spec.key), reverse=spec.descending)
 
     def _repaint(self) -> None:
@@ -122,8 +122,8 @@ class SessionsScreen(Screen[None]):
         raw_query = self.query_one("#filter", Input).value
         query = parse_query(raw_query)
         self._visible_indices = []
-        rules = self._claude_app.prefs.color_rules
-        manual = self._claude_app.session_colors
+        rules = self._root_app.prefs.color_rules
+        manual = self._root_app.session_colors
         for idx, session in enumerate(self._sessions):
             if not query.is_empty and not self._matches(session, query):
                 continue
@@ -171,7 +171,7 @@ class SessionsScreen(Screen[None]):
 
     @on(DataTable.RowHighlighted)
     def _on_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
-        if not self._claude_app.prefs.preview_visible:
+        if not self._root_app.prefs.preview_visible:
             return
         session = self._selected_session()
         preview = self.query_one("#preview", SessionPreview)
@@ -210,13 +210,13 @@ class SessionsScreen(Screen[None]):
     def _apply_settings(self, result: Config | None) -> None:
         if result is None:
             return
-        self._claude_app.update_prefs(result)
+        self._root_app.update_prefs(result)
         self._apply_sort()
         self._repaint()
         self.notify("Ajustes guardados")
 
     def _prefs(self) -> Config:
-        return self._claude_app.prefs
+        return self._root_app.prefs
 
     def _launch(
         self,
@@ -224,7 +224,7 @@ class SessionsScreen(Screen[None]):
         display_name: str | None,
         mode: LaunchMode,
     ) -> None:
-        provider = self._claude_app.provider
+        provider = self._root_app.provider
         argv = (
             provider.resume_argv(session_id, display_name)
             if session_id is not None
@@ -257,10 +257,10 @@ class SessionsScreen(Screen[None]):
         if result is None:
             return  # cancelled
         if result == "":
-            self._claude_app.names.delete(session_id)
+            self._root_app.names.delete(session_id)
             self.notify("Nombre borrado")
         else:
-            self._claude_app.names.set(session_id, result)
+            self._root_app.names.set(session_id, result)
             self.notify(f"Renombrado: {result}")
         self._populate()
 
@@ -288,7 +288,7 @@ class SessionsScreen(Screen[None]):
             delete_session(
                 session.id,
                 self.project.encoded_path,
-                names_store=self._claude_app.names,
+                names_store=self._root_app.names,
                 force=True,  # user already confirmed the warning in the modal
             )
         except OSError as exc:
@@ -326,7 +326,7 @@ class SessionsScreen(Screen[None]):
                 delete_session(
                     session.id,
                     self.project.encoded_path,
-                    names_store=self._claude_app.names,
+                    names_store=self._root_app.names,
                     force=True,
                 )
                 deleted += 1
@@ -365,7 +365,7 @@ class SessionsScreen(Screen[None]):
         self.notify("Sesiones re-escaneadas")
 
     def action_toggle_preview(self) -> None:
-        prefs = self._claude_app.prefs
+        prefs = self._root_app.prefs
         new_prefs = Config(
             default_mode=prefs.default_mode,
             projects_sort=prefs.projects_sort,
@@ -373,7 +373,7 @@ class SessionsScreen(Screen[None]):
             preview_visible=not prefs.preview_visible,
             group_worktrees=prefs.group_worktrees,
         )
-        self._claude_app.update_prefs(new_prefs)
+        self._root_app.update_prefs(new_prefs)
         self._apply_preview_visibility()
         if new_prefs.preview_visible:
             session = self._selected_session()
@@ -384,14 +384,14 @@ class SessionsScreen(Screen[None]):
 
     def action_edit_color_rules(self) -> None:
         self.app.push_screen(
-            ColorRulesEditorModal(list(self._claude_app.prefs.color_rules)),
+            ColorRulesEditorModal(list(self._root_app.prefs.color_rules)),
             self._apply_color_rules,
         )
 
     def _apply_color_rules(self, result: list[ColorRule] | None) -> None:
         if result is None:
             return
-        prefs = self._claude_app.prefs
+        prefs = self._root_app.prefs
         new_prefs = Config(
             default_mode=prefs.default_mode,
             projects_sort=prefs.projects_sort,
@@ -400,7 +400,7 @@ class SessionsScreen(Screen[None]):
             group_worktrees=prefs.group_worktrees,
             color_rules=result,
         )
-        self._claude_app.update_prefs(new_prefs)
+        self._root_app.update_prefs(new_prefs)
         self._repaint()
         self.notify(f"Reglas guardadas ({len(result)})")
 
@@ -408,7 +408,7 @@ class SessionsScreen(Screen[None]):
         session = self._selected_session()
         if session is None:
             return
-        store = self._claude_app.session_colors
+        store = self._root_app.session_colors
         current = store.get(session.id)
         subtitle = f"{(session.display_name or session.first_prompt)[:60]}"
         self.app.push_screen(
@@ -419,7 +419,7 @@ class SessionsScreen(Screen[None]):
     def _apply_color(self, session_id: str, result: str | None) -> None:
         if result is None:
             return  # cancelled
-        store = self._claude_app.session_colors
+        store = self._root_app.session_colors
         if result == "":
             store.delete(session_id)
             self.notify("Color borrado")
@@ -449,25 +449,25 @@ class SessionsScreen(Screen[None]):
     def action_sort_column(self, key: str) -> None:
         if key not in _SORT_KEYS_BY_COLUMN:
             return
-        spec = self._claude_app.prefs.sessions_sort
+        spec = self._root_app.prefs.sessions_sort
         if spec.key == key:
             new_spec = SortSpec(key=key, descending=not spec.descending)
         else:
             new_spec = SortSpec(key=key, descending=True)
         new_prefs = Config(
-            default_mode=self._claude_app.prefs.default_mode,
-            projects_sort=self._claude_app.prefs.projects_sort,
+            default_mode=self._root_app.prefs.default_mode,
+            projects_sort=self._root_app.prefs.projects_sort,
             sessions_sort=new_spec,
-            preview_visible=self._claude_app.prefs.preview_visible,
-            group_worktrees=self._claude_app.prefs.group_worktrees,
+            preview_visible=self._root_app.prefs.preview_visible,
+            group_worktrees=self._root_app.prefs.group_worktrees,
         )
-        self._claude_app.update_prefs(new_prefs)
+        self._root_app.update_prefs(new_prefs)
         self._apply_sort()
         self._repaint()
         self.notify(f"Orden: {key} {'desc' if new_spec.descending else 'asc'}")
 
     def action_toggle_sort_direction(self) -> None:
-        spec = self._claude_app.prefs.sessions_sort
+        spec = self._root_app.prefs.sessions_sort
         self.action_sort_column(spec.key)
 
 

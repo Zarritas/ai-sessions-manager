@@ -9,12 +9,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from multi_claude.colors import SessionColorsStore
-    from multi_claude.config import Config
-    from multi_claude.names import NamesStore
-    from multi_claude.project_folders import ProjectFoldersStore
-    from multi_claude.project_names import ProjectNamesStore
-    from multi_claude.providers.base import Provider
+    from ai_sessions_manager.colors import SessionColorsStore
+    from ai_sessions_manager.config import Config
+    from ai_sessions_manager.names import NamesStore
+    from ai_sessions_manager.project_folders import ProjectFoldersStore
+    from ai_sessions_manager.project_names import ProjectNamesStore
+    from ai_sessions_manager.providers.base import Provider
 
 
 class AppProtocol(Protocol):

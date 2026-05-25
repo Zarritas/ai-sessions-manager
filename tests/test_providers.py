@@ -7,11 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from multi_claude import discovery as discovery_module
-from multi_claude.providers import ALL_PROVIDERS, detect_available
-from multi_claude.providers.base import Provider
-from multi_claude.providers.claude import ClaudeProvider
-from multi_claude.providers.codex import CodexProvider
+from ai_sessions_manager import discovery as discovery_module
+from ai_sessions_manager.providers import ALL_PROVIDERS, detect_available
+from ai_sessions_manager.providers.base import Provider
+from ai_sessions_manager.providers.claude import ClaudeProvider
+from ai_sessions_manager.providers.codex import CodexProvider
 
 
 # --------------------------------------------------------------------------- #
@@ -155,7 +155,7 @@ def test_codex_scan_groups_rollouts_by_cwd(monkeypatch: pytest.MonkeyPatch, tmp_
     _write_codex_rollout(root, date_subdir="2026/02/22", session_id="bbbb-bbbb", cwd=str(tmp_path / "proj-a"))
     _write_codex_rollout(root, date_subdir="2026/02/22", session_id="cccc-cccc", cwd=str(tmp_path / "proj-b"))
 
-    monkeypatch.setattr("multi_claude.providers.codex.CODEX_SESSIONS_DIR", root)
+    monkeypatch.setattr("ai_sessions_manager.providers.codex.CODEX_SESSIONS_DIR", root)
 
     p = CodexProvider()
     projects = p.scan_projects()
@@ -171,7 +171,7 @@ def test_codex_scan_marks_orphan_when_cwd_missing(
     root = tmp_path / ".codex" / "sessions"
     _write_codex_rollout(root, date_subdir="2026/02/21", session_id="orph", cwd=str(tmp_path / "does-not-exist"))
 
-    monkeypatch.setattr("multi_claude.providers.codex.CODEX_SESSIONS_DIR", root)
+    monkeypatch.setattr("ai_sessions_manager.providers.codex.CODEX_SESSIONS_DIR", root)
 
     [proj] = CodexProvider().scan_projects()
     assert proj.is_orphan is True
@@ -181,7 +181,7 @@ def test_codex_scan_returns_empty_when_root_missing(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     monkeypatch.setattr(
-        "multi_claude.providers.codex.CODEX_SESSIONS_DIR", tmp_path / "nope"
+        "ai_sessions_manager.providers.codex.CODEX_SESSIONS_DIR", tmp_path / "nope"
     )
     assert CodexProvider().scan_projects() == []
 
@@ -202,7 +202,7 @@ def test_codex_session_first_prompt_skips_boilerplate(
         boilerplate_lines=4,
     )
 
-    monkeypatch.setattr("multi_claude.providers.codex.CODEX_SESSIONS_DIR", root)
+    monkeypatch.setattr("ai_sessions_manager.providers.codex.CODEX_SESSIONS_DIR", root)
 
     provider = CodexProvider()
     [project] = provider.scan_projects()
@@ -229,7 +229,7 @@ def test_codex_session_falls_back_when_no_real_prompt(
         boilerplate_lines=2,
     )
 
-    monkeypatch.setattr("multi_claude.providers.codex.CODEX_SESSIONS_DIR", root)
+    monkeypatch.setattr("ai_sessions_manager.providers.codex.CODEX_SESSIONS_DIR", root)
 
     provider = CodexProvider()
     [project] = provider.scan_projects()
@@ -252,7 +252,7 @@ def test_codex_session_handles_missing_git_block(
         branch=None,
     )
 
-    monkeypatch.setattr("multi_claude.providers.codex.CODEX_SESSIONS_DIR", root)
+    monkeypatch.setattr("ai_sessions_manager.providers.codex.CODEX_SESSIONS_DIR", root)
 
     provider = CodexProvider()
     [project] = provider.scan_projects()

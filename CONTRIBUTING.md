@@ -1,12 +1,12 @@
 # Contributing
 
-Thanks for considering a contribution to `multi-claude`. The project is small and the bar is informal — get the tests green, keep the diff focused.
+Thanks for considering a contribution to `ai-sessions-manager`. The project is small and the bar is informal — get the tests green, keep the diff focused.
 
 ## Setup
 
 ```bash
-git clone https://github.com/Zarritas/multi-claude.git
-cd multi-claude
+git clone https://github.com/Zarritas/ai-sessions-manager.git
+cd ai-sessions-manager
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
@@ -18,7 +18,7 @@ The CI matrix runs Python 3.10, 3.11 and 3.12 on Ubuntu. Locally, the four comma
 ```bash
 ruff check .            # lint
 ruff format --check .   # format check (use `ruff format .` to apply)
-mypy src/multi_claude   # type checking
+mypy src/ai_sessions_manager   # type checking
 pytest -q               # tests
 ```
 
@@ -26,7 +26,7 @@ Run all four before opening a PR. CI will gate on them.
 
 ## Commit style
 
-The existing history uses short imperative subjects (`Add configurable launch modes`, `Rename console script from mc to multi-claude`). Follow that.
+The existing history uses short imperative subjects (`Add configurable launch modes`, `Rename console script from mc to ai-sessions-manager`). Follow that.
 
 If your change is user-visible, add an entry under `## [Unreleased]` in `CHANGELOG.md` in the appropriate subsection (`Added` / `Changed` / `Fixed` / `Removed`).
 
@@ -45,14 +45,14 @@ A wheel installed from the tagged commit will report `0.2.0`. An install from a 
 
 ## Architecture cheatsheet
 
-- `src/multi_claude/app.py` — root Textual app, owns prefs and the names store.
-- `src/multi_claude/discovery.py` — scans `~/.claude/projects/`, resolves real cwds.
-- `src/multi_claude/session.py` — parses headers from `.jsonl` files cheaply.
-- `src/multi_claude/launcher.py` — dispatches `claude --resume` into a multiplexer / new window / suspended TUI.
-- `src/multi_claude/index.py` — SQLite cache + FTS5 search.
-- `src/multi_claude/screens/` — Textual screens (projects, sessions, search, worktrees).
-- `src/multi_claude/widgets/` — reusable widgets (preview panel).
-- `src/multi_claude/modals.py` — modal dialogs (rename, add project, confirm delete, settings, merge).
+- `src/ai_sessions_manager/app.py` — root Textual app, owns prefs and the names store.
+- `src/ai_sessions_manager/discovery.py` — scans `~/.claude/projects/`, resolves real cwds.
+- `src/ai_sessions_manager/session.py` — parses headers from `.jsonl` files cheaply.
+- `src/ai_sessions_manager/launcher.py` — dispatches `claude --resume` into a multiplexer / new window / suspended TUI.
+- `src/ai_sessions_manager/index.py` — SQLite cache + FTS5 search.
+- `src/ai_sessions_manager/screens/` — Textual screens (projects, sessions, search, worktrees).
+- `src/ai_sessions_manager/widgets/` — reusable widgets (preview panel).
+- `src/ai_sessions_manager/modals.py` — modal dialogs (rename, add project, confirm delete, settings, merge).
 - `tests/conftest.py::write_session` — builder for synthetic Claude project trees on `tmp_path`. Reuse it.
 
 ## Scope hints

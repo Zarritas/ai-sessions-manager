@@ -1,8 +1,8 @@
-"""Tests for multi_claude.formatting."""
+"""Tests for ai_sessions_manager.formatting."""
 
 from __future__ import annotations
 
-from multi_claude.formatting import format_relative_time, format_size
+from ai_sessions_manager.formatting import format_relative_time, format_size
 
 
 def test_format_relative_time_seconds() -> None:

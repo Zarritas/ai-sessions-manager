@@ -6,13 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from multi_claude.discovery import (
+from ai_sessions_manager.discovery import (
     Project,
     ProjectFolder,
     WorktreeGroup,
     group_into_folders,
 )
-from multi_claude.project_folders import ProjectFoldersStore
+from ai_sessions_manager.project_folders import ProjectFoldersStore
 
 
 def _project(encoded: Path, *, name: str = "p", common: Path | None = None) -> Project:

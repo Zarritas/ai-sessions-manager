@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from multi_claude.path_complete import common_prefix_completion, expand, list_suggestions
+from ai_sessions_manager.path_complete import common_prefix_completion, expand, list_suggestions
 
 
 def test_empty_prefix_returns_empty(tmp_path: Path) -> None:

@@ -17,9 +17,9 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, RadioButton, RadioSet, Static
 
-from multi_claude.colors import PALETTE, ColorRule
-from multi_claude.config import VALID_MODES, Config, LaunchMode, alternate_for
-from multi_claude.discovery import Project
+from ai_sessions_manager.colors import PALETTE, ColorRule
+from ai_sessions_manager.config import VALID_MODES, Config, LaunchMode, alternate_for
+from ai_sessions_manager.discovery import Project
 
 
 def _stop_event(event: object) -> None:
@@ -520,7 +520,7 @@ class AddProjectModal(ModalScreen[Path | None]):
     def _refresh_suggestions(self, prefix: str) -> None:
         from textual.widgets import OptionList
 
-        from multi_claude.path_complete import list_suggestions
+        from ai_sessions_manager.path_complete import list_suggestions
 
         suggestions = list_suggestions(prefix)
         opt_list = self.query_one("#suggestions", OptionList)
@@ -611,7 +611,7 @@ class AddProjectModal(ModalScreen[Path | None]):
         return True
 
     def _tab_complete(self) -> None:
-        from multi_claude.path_complete import common_prefix_completion
+        from ai_sessions_manager.path_complete import common_prefix_completion
 
         input_w = self.query_one("#path-input", Input)
         completion = common_prefix_completion(input_w.value)

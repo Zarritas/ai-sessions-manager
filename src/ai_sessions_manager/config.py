@@ -1,4 +1,4 @@
-"""User preferences persisted to ``~/.config/multi-claude/config.json``.
+"""User preferences persisted to ``~/.config/ai-sessions-manager/config.json``.
 
 Stored settings:
 
@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from multi_claude.colors import ColorRule
+from ai_sessions_manager.colors import ColorRule
 
 LaunchMode = Literal["auto", "window", "suspend"]
 VALID_MODES: tuple[LaunchMode, ...] = ("auto", "window", "suspend")
@@ -101,7 +101,7 @@ def config_path() -> Path:
         base = Path(appdata) if appdata else Path.home() / ".config"
     else:
         base = Path.home() / ".config"
-    return base / "multi-claude" / "config.json"
+    return base / "ai-sessions-manager" / "config.json"
 
 
 def load_config(path: Path | None = None) -> Config:

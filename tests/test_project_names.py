@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from multi_claude.project_names import ProjectNamesStore, project_key, repo_key
+from ai_sessions_manager.project_names import ProjectNamesStore, project_key, repo_key
 
 
 def test_set_and_get_project_alias(tmp_path: Path) -> None:

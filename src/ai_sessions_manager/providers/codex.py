@@ -24,8 +24,8 @@ import shutil
 from collections import defaultdict
 from pathlib import Path
 
-from multi_claude.discovery import Project
-from multi_claude.session import Session
+from ai_sessions_manager.discovery import Project
+from ai_sessions_manager.session import Session
 
 CODEX_SESSIONS_DIR = Path.home() / ".codex" / "sessions"
 
@@ -36,7 +36,7 @@ _PROMPT_MAX_CHARS = 120
 
 
 class CodexProvider:
-    """:class:`multi_claude.providers.base.Provider` implementation for Codex CLI."""
+    """:class:`ai_sessions_manager.providers.base.Provider` implementation for Codex CLI."""
 
     id = "codex"
     display_name = "OpenAI Codex"

@@ -1,4 +1,4 @@
-"""Tests for multi_claude.launcher."""
+"""Tests for ai_sessions_manager.launcher."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from multi_claude.launcher import (
+from ai_sessions_manager.launcher import (
     LauncherError,
     _build_claude_argv,
     detect_multiplexer,
@@ -93,14 +93,14 @@ def test_build_argv_with_session_and_display_name() -> None:
 def test_detect_multiplexer_prefers_tmux(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TMUX", "/tmp/tmux-x/default,123,0")
     monkeypatch.setenv("ZELLIJ", "1")
-    with patch("multi_claude.launcher.shutil.which", return_value="/usr/bin/tmux"):
+    with patch("ai_sessions_manager.launcher.shutil.which", return_value="/usr/bin/tmux"):
         assert detect_multiplexer() == "tmux"
 
 
 def test_detect_multiplexer_zellij_when_no_tmux(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("TMUX", raising=False)
     monkeypatch.setenv("ZELLIJ", "1")
-    with patch("multi_claude.launcher.shutil.which", return_value="/usr/bin/zellij"):
+    with patch("ai_sessions_manager.launcher.shutil.which", return_value="/usr/bin/zellij"):
         assert detect_multiplexer() == "zellij"
 
 
@@ -110,7 +110,7 @@ def test_detect_multiplexer_terminator_when_no_tmux_no_zellij(
     monkeypatch.delenv("TMUX", raising=False)
     monkeypatch.delenv("ZELLIJ", raising=False)
     monkeypatch.setenv("TERMINATOR_UUID", "term://x")
-    with patch("multi_claude.launcher.shutil.which", return_value="/usr/bin/terminator"):
+    with patch("ai_sessions_manager.launcher.shutil.which", return_value="/usr/bin/terminator"):
         assert detect_multiplexer() == "terminator"
 
 
@@ -119,7 +119,7 @@ def test_detect_multiplexer_tmux_wins_over_terminator(
 ) -> None:
     monkeypatch.setenv("TMUX", "x")
     monkeypatch.setenv("TERMINATOR_UUID", "term://x")
-    with patch("multi_claude.launcher.shutil.which", return_value="/usr/bin/tmux"):
+    with patch("ai_sessions_manager.launcher.shutil.which", return_value="/usr/bin/tmux"):
         assert detect_multiplexer() == "tmux"
 
 
@@ -136,12 +136,12 @@ def test_detect_multiplexer_none_when_env_set_but_binary_missing(
     monkeypatch.setenv("TMUX", "x")
     monkeypatch.delenv("ZELLIJ", raising=False)
     monkeypatch.delenv("TERMINATOR_UUID", raising=False)
-    with patch("multi_claude.launcher.shutil.which", return_value=None):
+    with patch("ai_sessions_manager.launcher.shutil.which", return_value=None):
         assert detect_multiplexer() is None
 
 
 def test_launch_claude_raises_when_no_claude(monkeypatch: pytest.MonkeyPatch) -> None:
-    with patch("multi_claude.launcher.shutil.which", return_value=None):
+    with patch("ai_sessions_manager.launcher.shutil.which", return_value=None):
         with pytest.raises(LauncherError):
             launch_claude(Path("/tmp"), "id")
 
@@ -157,8 +157,8 @@ def test_launch_claude_uses_tmux(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = _MuxRun()
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.run", side_effect=runner),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.run", side_effect=runner),
     ):
         launch_claude(Path("/work/x"), "sid-1")
 
@@ -178,8 +178,8 @@ def test_launch_claude_uses_zellij(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = _MuxRun()
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.run", side_effect=runner),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.run", side_effect=runner),
     ):
         launch_claude(Path("/work/y"), None)
 
@@ -199,8 +199,8 @@ def test_launch_claude_uses_terminator(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = _MuxRun()
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.run", side_effect=runner),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.run", side_effect=runner),
     ):
         launch_claude(Path("/work/t"), "sid-3", display_name="Mi feature")
 
@@ -235,8 +235,8 @@ def test_launch_claude_tmux_failure_raises(monkeypatch: pytest.MonkeyPatch) -> N
         return _Result()
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.run", side_effect=failing_run),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.run", side_effect=failing_run),
         pytest.raises(LauncherError, match="tmux: server not running"),
     ):
         launch_claude(Path("/work"), "sid")
@@ -257,8 +257,8 @@ def test_launch_claude_fallback_runs_inline(monkeypatch: pytest.MonkeyPatch) -> 
         calls.append((argv, kwargs.get("cwd")))
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.run", side_effect=fake_run),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.run", side_effect=fake_run),
     ):
         launch_claude(Path("/work/z"), "sid-2", app=None)
 
@@ -280,8 +280,8 @@ def test_launch_claude_window_mode_uses_kitty(monkeypatch: pytest.MonkeyPatch) -
             popen_calls.append((argv, kwargs))
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.Popen", FakePopen),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.Popen", FakePopen),
     ):
         launch_claude(Path("/work/k"), "sid-k", mode="window")
 
@@ -313,8 +313,8 @@ def test_launch_claude_window_mode_falls_back_to_suspend_when_no_emulator(
         calls.append((argv, kwargs.get("cwd")))
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.run", side_effect=fake_run),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.run", side_effect=fake_run),
     ):
         launch_claude(Path("/work/q"), "sid-q", mode="window")
 
@@ -335,8 +335,8 @@ def test_launch_claude_suspend_mode_skips_multiplexer(monkeypatch: pytest.Monkey
         calls.append((argv, kwargs.get("cwd")))
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.run", side_effect=fake_run),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.run", side_effect=fake_run),
     ):
         launch_claude(Path("/work/s"), None, mode="suspend")
 
@@ -349,7 +349,7 @@ def test_detect_emulator_prefers_term_program_ghostty(
     _clear_emulator_envs(monkeypatch)
     monkeypatch.setenv("TERM_PROGRAM", "ghostty")
     with patch(
-        "multi_claude.launcher.shutil.which",
+        "ai_sessions_manager.launcher.shutil.which",
         side_effect=lambda cmd: f"/usr/bin/{cmd}" if cmd == "ghostty" else None,
     ):
         emu = detect_terminal_emulator()
@@ -360,7 +360,7 @@ def test_detect_emulator_term_program_wezterm(monkeypatch: pytest.MonkeyPatch) -
     _clear_emulator_envs(monkeypatch)
     monkeypatch.setenv("TERM_PROGRAM", "WezTerm")  # case-insensitive
     with patch(
-        "multi_claude.launcher.shutil.which",
+        "ai_sessions_manager.launcher.shutil.which",
         side_effect=lambda cmd: f"/usr/bin/{cmd}" if cmd == "wezterm" else None,
     ):
         emu = detect_terminal_emulator()
@@ -374,7 +374,7 @@ def test_detect_emulator_term_program_beats_xterm_fallback(
     _clear_emulator_envs(monkeypatch)
     monkeypatch.setenv("TERM_PROGRAM", "ghostty")
     with patch(
-        "multi_claude.launcher.shutil.which",
+        "ai_sessions_manager.launcher.shutil.which",
         side_effect=lambda cmd: f"/usr/bin/{cmd}",  # everything exists
     ):
         emu = detect_terminal_emulator()
@@ -386,7 +386,7 @@ def test_detect_emulator_ghostty_via_env_var(monkeypatch: pytest.MonkeyPatch) ->
     _clear_emulator_envs(monkeypatch)
     monkeypatch.setenv("GHOSTTY_RESOURCES_DIR", "/snap/ghostty/current/share/ghostty")
     with patch(
-        "multi_claude.launcher.shutil.which",
+        "ai_sessions_manager.launcher.shutil.which",
         side_effect=lambda cmd: f"/usr/bin/{cmd}" if cmd == "ghostty" else None,
     ):
         emu = detect_terminal_emulator()
@@ -402,7 +402,7 @@ def test_detect_emulator_vscode_unsupported_raises_in_window_mode(
     monkeypatch.setenv("TERM_PROGRAM", "vscode")
 
     with patch(
-        "multi_claude.launcher.shutil.which",
+        "ai_sessions_manager.launcher.shutil.which",
         side_effect=lambda cmd: "/usr/bin/claude" if cmd == "claude" else None,
     ):
         with pytest.raises(LauncherError, match="vscode"):
@@ -424,8 +424,8 @@ def test_launch_claude_window_mode_uses_ghostty(monkeypatch: pytest.MonkeyPatch)
             popen_calls.append(argv)
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.Popen", FakePopen),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.Popen", FakePopen),
     ):
         launch_claude(Path("/work/g"), "sid-g", mode="window")
 
@@ -457,8 +457,8 @@ def test_launch_claude_auto_falls_through_to_window(monkeypatch: pytest.MonkeyPa
             popen_calls.append(argv)
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.Popen", FakePopen),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.Popen", FakePopen),
     ):
         launch_claude(Path("/work/w"), None, mode="auto")
 
@@ -483,8 +483,8 @@ def test_launch_claude_window_mode_uses_windows_terminal(
             popen_calls.append(argv)
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.Popen", FakePopen),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.Popen", FakePopen),
     ):
         launch_claude(Path("/work/wt"), "sid-wt", mode="window")
 
@@ -502,7 +502,7 @@ def test_detect_emulator_conemu_unsupported_raises_in_window_mode(
     monkeypatch.setenv("ConEmuPID", "4321")
 
     with patch(
-        "multi_claude.launcher.shutil.which",
+        "ai_sessions_manager.launcher.shutil.which",
         side_effect=lambda cmd: "/fake/claude" if cmd == "claude" else None,
     ):
         with pytest.raises(LauncherError, match="conemu"):
@@ -527,8 +527,8 @@ def test_launch_claude_window_mode_uses_apple_terminal(
             popen_calls.append(argv)
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.Popen", FakePopen),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.Popen", FakePopen),
     ):
         launch_claude(Path("/Users/jane/proj"), "sid-mac", mode="window")
 
@@ -567,8 +567,8 @@ def test_launch_claude_window_mode_uses_iterm(monkeypatch: pytest.MonkeyPatch) -
             popen_calls.append(argv)
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.Popen", FakePopen),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.Popen", FakePopen),
     ):
         launch_claude(Path("/Users/jane/proj"), None, mode="window")
 
@@ -603,8 +603,8 @@ def test_iterm_applescript_escapes_embedded_quotes(monkeypatch: pytest.MonkeyPat
             popen_calls.append(argv)
 
     with (
-        patch("multi_claude.launcher.shutil.which", side_effect=fake_which),
-        patch("multi_claude.launcher.subprocess.Popen", FakePopen),
+        patch("ai_sessions_manager.launcher.shutil.which", side_effect=fake_which),
+        patch("ai_sessions_manager.launcher.subprocess.Popen", FakePopen),
     ):
         launch_claude(Path("/work"), None, display_name='say "hi" \\n', mode="window")
 
